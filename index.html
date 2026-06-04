@@ -214,7 +214,7 @@ function App(){
       vista==="ing"
         ?h(VistaIng,{onAddG:addG,onEditG:editG,onAddC:addC,onDelC:delC,gastos,comisiones})
         :h(VistaCon,{gastos,comisiones,onDelG:delG,onEditG:editG})),
-    showCfg&&h("div",{style:S.modalBg},
+    showCfg?h("div",{style:S.modalBg},
       h("div",{style:S.modal},
         h("div",{style:S.modalTitle},"Configurar API Key"),
         h("p",{style:{color:"#6B7280",fontSize:13,marginBottom:6}},"Ingresa tu API key de Anthropic (console.anthropic.com). Se guarda en este navegador."),
