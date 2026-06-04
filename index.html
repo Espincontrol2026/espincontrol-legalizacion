@@ -510,7 +510,7 @@ function Tabla({gastos,comisiones,onDel,onEdit,showIng}){
           h("td",{style:S.td},h("span",{style:g.mp==="TARJETA"?S.tagTj:S.tagEf},g.mp)),
           h("td",{style:S.td},h("div",{style:{display:"flex",gap:4}},
             onEdit&&h("button",{style:{...S.btnDel,background:"#EFF6FF",color:"#1D4ED8"},onClick:()=>onEdit(g)},""),
-            onDel&&h("button",{style:S.btnDel,onClick:()=>onDel(g.id)},"")))))));
+            onDel&&h("button",{style:S.btnDel,onClick:()=>onDel(g.id)},""))))))));
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(h(App,null));
