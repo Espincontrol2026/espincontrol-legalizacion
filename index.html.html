@@ -228,7 +228,8 @@ function App(){
                 setTimeout(function(){setKeySaved(false);setShowCfg(false);},1200);}
             }},keySaved?"Guardada!":"Guardar Key"),
           h("button",{style:{...S.btnOrange,marginTop:0,flex:1,background:"#F1F5F9",color:"#374151"},
-            onClick:function(){setShowCfg(false);}},getApiKey()?"Cerrar":"Omitir")))));
+            onClick:function(){setShowCfg(false);}},getApiKey()?"Cerrar":"Omitir"))))
+    :null));
 }
 
 //  Vista Ingeniero 
