@@ -121,57 +121,117 @@ async function ocr(base64,mediaType){
 //  Excel 
 function exportarExcel(gastos,comisiones,ingeniero){
   const wb=XLSX.utils.book_new();
+  const CUR=(v)=>({v:Number(v||0),t:"n",z:'"$"#,##0'});
+  const HDR=(v)=>({v,t:"s",s:{font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"0F4C81"}},alignment:{horizontal:"center"}}});
+  const SUB=(v)=>({v,t:"s",s:{font:{bold:true},fill:{fgColor:{rgb:"E8F0FE"}}}});
+  const LBL=(v)=>({v,t:"s",s:{font:{bold:true,color:{rgb:"0F4C81"}}}});
 
-  // Una hoja por comision
   comisiones.forEach(com=>{
     const gg=gastos.filter(g=>g.comId===com.id&&g.ing===ingeniero);
     if(!gg.length)return;
     const d=[];
-    d.push(["ESPINCONTROL S.A.S."]);
-    d.push(["Instrumentaci\u00F3n, Automatizaci\u00F3n y Sistemas El\u00E9ctricos"]);
-    d.push([]);d.push(["FO-AF-002 \u2014 LEGALIZACI\u00D3N DE ANTICIPO"]);d.push([]);
-    d.push(["Nombre del Solicitante:",ingeniero,"","","Centro de Costos:",com.cc,"","Cliente:",com.cli]);
-    d.push([]);
     const ef=gg.filter(g=>g.mp==="EFECTIVO").reduce((s,g)=>s+num(g.tc),0);
     const tj=gg.filter(g=>g.mp==="TARJETA").reduce((s,g)=>s+num(g.tc),0);
-    d.push(["","","","","","Total Tarjeta:","",tj]);
-    d.push(["","","","","","Total Efectivo:","",ef]);
-    d.push(["","","","","","Total General:","",ef+tj]);
+
+    // Titulo
+    d.push([{v:"ESPINCONTROL S.A.S. - Legalizacion de Anticipo",t:"s",s:{font:{bold:true,sz:13,color:{rgb:"0F4C81"}},alignment:{horizontal:"center"}}}]);
     d.push([]);
-    d.push(["Item","Fecha","Pagado a","NIT","Factura","Concepto","Subtotal","IVA","Tarjeta","Efectivo"]);
+
+    // Info cabecera en 2 columnas
+    d.push([LBL("Ingeniero:"),{v:ingeniero,t:"s"},LBL("Cliente:"),{v:com.cli,t:"s"},LBL("Centro de Costos:"),{v:com.cc,t:"s"}]);
+    d.push([]);
+
+    // Resumen totales
+    d.push([LBL("Total Efectivo:"),CUR(ef),LBL("Total Tarjeta:"),CUR(tj),LBL("Total General:"),CUR(ef+tj)]);
+    d.push([]);
+
+    // Encabezado tabla
+    d.push([HDR("Item"),HDR("Fecha"),HDR("Establecimiento"),HDR("NIT"),HDR("Factura"),HDR("Concepto"),HDR("Subtotal"),HDR("IVA"),HDR("Tarjeta"),HDR("Efectivo")]);
+
     const fi=d.length+1;
     gg.forEach((g,i)=>{
-      d.push([i+1,g.fp,g.est,g.nit,g.fac,g.con,num(g.sub),num(g.iva),
-        g.mp==="TARJETA"?num(g.tc):0,g.mp==="EFECTIVO"?num(g.tc):0]);
+      const bg=i%2===0?"FFFFFF":"F8FAFC";
+      const cell=(v,t)=>({v,t:t||"s",s:{fill:{fgColor:{rgb:bg}}}});
+      d.push([
+        cell(i+1,"n"),cell(g.fp),cell(g.est),cell(g.nit),cell(g.fac),cell(g.con),
+        {v:num(g.sub),t:"n",z:'"$"#,##0',s:{fill:{fgColor:{rgb:bg}},alignment:{horizontal:"right"}}},
+        {v:num(g.iva),t:"n",z:'"$"#,##0',s:{fill:{fgColor:{rgb:bg}},alignment:{horizontal:"right"}}},
+        {v:g.mp==="TARJETA"?num(g.tc):0,t:"n",z:'"$"#,##0',s:{fill:{fgColor:{rgb:bg}},alignment:{horizontal:"right"}}},
+        {v:g.mp==="EFECTIVO"?num(g.tc):0,t:"n",z:'"$"#,##0',s:{fill:{fgColor:{rgb:bg}},alignment:{horizontal:"right"}}},
+      ]);
     });
     const ff=fi+gg.length-1;
-    d.push([]);
-    d.push(["","","","","","TOTALES",{f:`SUM(G${fi}:G${ff})`},{f:`SUM(H${fi}:H${ff})`},{f:`SUM(I${fi}:I${ff})`},{f:`SUM(J${fi}:J${ff})`}]);
-    d.push([]);d.push(["","","Elabor\u00F3:","","","","Revis\u00F3:","","","Aprob\u00F3 Contabilidad:"]);
+
+    // Fila de totales
+    d.push([
+      SUB(""),SUB(""),SUB(""),SUB(""),SUB(""),SUB("TOTALES"),
+      {v:0,t:"n",f:"SUM(G"+fi+":G"+ff+")",s:{font:{bold:true},fill:{fgColor:{rgb:"E8F0FE"}}}},
+      {v:0,t:"n",f:"SUM(H"+fi+":H"+ff+")",s:{font:{bold:true},fill:{fgColor:{rgb:"E8F0FE"}}}},
+      {v:0,t:"n",f:"SUM(I"+fi+":I"+ff+")",s:{font:{bold:true},fill:{fgColor:{rgb:"E8F0FE"}}}},
+      {v:0,t:"n",f:"SUM(J"+fi+":J"+ff+")",s:{font:{bold:true},fill:{fgColor:{rgb:"E8F0FE"}}}},
+    ]);
+
     const ws=XLSX.utils.aoa_to_sheet(d);
-    ws["!cols"]=[{wch:5},{wch:13},{wch:28},{wch:16},{wch:13},{wch:22},{wch:13},{wch:11},{wch:16},{wch:16}];
-    const nombre=(com.cli+" CC"+com.cc).slice(0,28);
+    ws["!cols"]=[{wch:5},{wch:13},{wch:28},{wch:16},{wch:14},{wch:22},{wch:13},{wch:11},{wch:16},{wch:16}];
+    ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:9}}];
+    const nombre=(ingeniero.split(" ")[0]+" CC"+com.cc).slice(0,28);
     XLSX.utils.book_append_sheet(wb,ws,nombre);
   });
 
-  // Hoja resumen consolidado
-  const dr=[["RESUMEN CONSOLIDADO \u2014 "+ingeniero],[],["Proyecto","CC","Gastos","Efectivo","Tarjeta","IVA","Total"]];
+  // Hoja resumen
+  const dr=[];
+  dr.push([{v:"RESUMEN CONSOLIDADO - "+ingeniero,t:"s",s:{font:{bold:true,sz:12,color:{rgb:"0F4C81"}},alignment:{horizontal:"center"}}}]);
+  dr.push([]);
+  dr.push([HDR("Proyecto"),HDR("CC"),HDR("N Gastos"),HDR("Efectivo"),HDR("Tarjeta"),HDR("IVA"),HDR("Total")]);
+  let totEf=0,totTj=0,totIVA=0,totG=0;
   comisiones.forEach(com=>{
     const gg=gastos.filter(g=>g.comId===com.id&&g.ing===ingeniero);
     if(!gg.length)return;
-    dr.push([com.cli,com.cc,gg.length,
-      gg.filter(g=>g.mp==="EFECTIVO").reduce((s,g)=>s+num(g.tc),0),
-      gg.filter(g=>g.mp==="TARJETA").reduce((s,g)=>s+num(g.tc),0),
-      gg.reduce((s,g)=>s+num(g.iva),0),
-      gg.reduce((s,g)=>s+num(g.tc),0)]);
+    const ef=gg.filter(g=>g.mp==="EFECTIVO").reduce((s,g)=>s+num(g.tc),0);
+    const tj=gg.filter(g=>g.mp==="TARJETA").reduce((s,g)=>s+num(g.tc),0);
+    const iva=gg.reduce((s,g)=>s+num(g.iva),0);
+    totEf+=ef;totTj+=tj;totIVA+=iva;totG+=gg.length;
+    dr.push([{v:com.cli,t:"s"},{v:com.cc,t:"s"},{v:gg.length,t:"n"},
+      {v:ef,t:"n",z:'"$"#,##0'},{v:tj,t:"n",z:'"$"#,##0'},
+      {v:iva,t:"n",z:'"$"#,##0'},{v:ef+tj,t:"n",z:'"$"#,##0'}]);
   });
+  dr.push([SUB(""),SUB(""),{v:totG,t:"n",s:{font:{bold:true},fill:{fgColor:{rgb:"E8F0FE"}}}},
+    {v:totEf,t:"n",z:'"$"#,##0',s:{font:{bold:true},fill:{fgColor:{rgb:"E8F0FE"}}}},
+    {v:totTj,t:"n",z:'"$"#,##0',s:{font:{bold:true},fill:{fgColor:{rgb:"E8F0FE"}}}},
+    {v:totIVA,t:"n",z:'"$"#,##0',s:{font:{bold:true},fill:{fgColor:{rgb:"E8F0FE"}}}},
+    {v:totEf+totTj,t:"n",z:'"$"#,##0',s:{font:{bold:true},fill:{fgColor:{rgb:"E8F0FE"}}}}]);
   const wsr=XLSX.utils.aoa_to_sheet(dr);
-  wsr["!cols"]=[{wch:24},{wch:10},{wch:8},{wch:16},{wch:16},{wch:14},{wch:16}];
+  wsr["!cols"]=[{wch:28},{wch:10},{wch:10},{wch:16},{wch:16},{wch:14},{wch:16}];
+  wsr["!merges"]=[{s:{r:0,c:0},e:{r:0,c:6}}];
   XLSX.utils.book_append_sheet(wb,wsr,"Resumen");
+
   XLSX.writeFile(wb,"Legalizacion_"+ingeniero.replace(/ /g,"_")+"_"+today()+".xlsx");
 }
 
-//  Helpers UI 
+
+async function ocr(base64,mediaType){
+  const apiKey=getApiKey();
+  if(!apiKey) throw new Error("API key no configurada - usa el boton Configurar");
+  const prompt='Analiza este recibo colombiano. Responde SOLO JSON sin markdown: {"establecimiento":"","nit":"","factura":"","subtotal":0,"iva":0,"total":0,"concepto_sugerido":"ALIMENTACION","fecha":""} concepto_sugerido debe ser uno de: ALIMENTACION, HOSPEDAJE, COMBUSTIBLE, PEAJES / TRANSPORTE, ALQUILER DE VEHICULO, MATERIAL, OTROS. Campos ilegibles: cadena vacia o 0.';
+  const r=await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-haiku-4-5",max_tokens:500,
+      messages:[{role:"user",content:[
+        {type:"image",source:{type:"base64",media_type:mediaType,data:base64}},
+        {type:"text",text:prompt}
+      ]}]})
+  });
+  if(!r.ok){const t=await r.text();throw new Error("HTTP "+r.status+": "+t.slice(0,80));}
+  const d=await r.json();
+  if(d.error) throw new Error(d.error.type+": "+d.error.message);
+  const t=d.content&&d.content.find(function(b){return b.type==="text";});
+  if(!t) throw new Error("Respuesta vacia del servidor");
+  return JSON.parse(t.text.replace(/```json|```/g,"").trim());
+}
+
+//  Excel 
+
 function Card({title,children}){return h("div",{style:S.card},h("div",{style:S.cardTitle},title),children);}
 function F({label,children,wide}){return h("div",{style:{gridColumn:wide?"1 / -1":"auto"}},h("label",{style:S.lbl},label),children);}
 function Kpi({label,value,icon,color}){
