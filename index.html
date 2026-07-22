@@ -22,12 +22,15 @@ const CONCEPTOS=["ALIMENTACI\u00D3N","HOSPEDAJE","COMBUSTIBLE","PEAJES / TRANSPO
 const INGENIEROS=["Felipe Rodriguez","Leidy Camacho","Luis Salinas","Nelson Chaparro"];
 const SK="espincontrol_gastos_v4";
 const SK_COM="espincontrol_comisiones_v1";
+const SK_ANT="espincontrol_anticipos_v1";
 const {useState,useEffect,useRef,createElement:h}=React;
 
 const loadG=()=>{try{return JSON.parse(localStorage.getItem(SK)||"[]")}catch{return[]}};
 const saveG=(g)=>{try{localStorage.setItem(SK,JSON.stringify(g))}catch(e){console.error(e)}};
 const loadC=()=>{try{return JSON.parse(localStorage.getItem(SK_COM)||"[]")}catch{return[]}};
 const saveC=(c)=>{try{localStorage.setItem(SK_COM,JSON.stringify(c))}catch(e){console.error(e)}};
+const loadA=()=>{try{return JSON.parse(localStorage.getItem(SK_ANT)||"[]")}catch{return[]}};
+const saveA=(a)=>{try{localStorage.setItem(SK_ANT,JSON.stringify(a))}catch(e){console.error(e)}};
 const fmt=(v)=>Number(v||0).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
 const num=(v)=>parseFloat(v)||0;
 const today=()=>new Date().toISOString().split("T")[0];
@@ -100,7 +103,7 @@ const setApiKey=(k)=>localStorage.setItem(API_KEY_STORAGE,k);
 async function ocr(base64,mediaType){
   const apiKey=getApiKey();
   if(!apiKey) throw new Error("API key no configurada - usa el boton Configurar");
-  const prompt='Analiza este recibo colombiano. Responde SOLO JSON sin markdown: {"establecimiento":"","nit":"","factura":"","subtotal":0,"iva":0,"total":0,"concepto_sugerido":"ALIMENTACION","fecha":""} concepto_sugerido debe ser uno de: ALIMENTACION, HOSPEDAJE, COMBUSTIBLE, PEAJES / TRANSPORTE, ALQUILER DE VEHICULO, MATERIAL, OTROS. Campos ilegibles: cadena vacia o 0.';
+  const prompt='Eres asistente contable colombiano. Analiza esta imagen que puede ser una FACTURA, TIQUETE POS o CUENTA DE COBRO. Responde SOLO JSON sin markdown ni texto adicional:\n{"tipo_doc":"FACTURA|POS|CUENTA_COBRO","establecimiento":"","nit":"","factura":"","subtotal":0,"iva":0,"total":0,"concepto_sugerido":"","fecha":""}\nReglas:\n- Si es CUENTA DE COBRO: establecimiento=nombre de quien cobra, nit=cedula/nit de quien cobra, factura=numero de cuenta de cobro, total=valor en numeros, subtotal=mismo valor que total, iva=0, concepto_sugerido segun el texto descriptivo.\n- Si es FACTURA o POS: extrae normalmente subtotal, iva y total por separado.\n- concepto_sugerido debe ser uno de: ALIMENTACION, HOSPEDAJE, COMBUSTIBLE, PEAJES / TRANSPORTE, ALQUILER DE VEHICULO, MATERIAL, OTROS.\n- Campos ilegibles: cadena vacia o 0.';
   const r=await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
@@ -322,10 +325,11 @@ function App(){
   const [vista,setVista]=useState("ing");
   const [gastos,setGastos]=useState([]);
   const [comisiones,setComisiones]=useState([]);
+  const [anticipos,setAnticipos]=useState([]);
   const [showCfg,setShowCfg]=useState(!getApiKey());
   const [keyInput,setKeyInput]=useState("");
   const [keySaved,setKeySaved]=useState(false);
-  useEffect(()=>{setGastos(loadG());setComisiones(loadC());},[]);
+  useEffect(()=>{setGastos(loadG());setComisiones(loadC());setAnticipos(loadA());},[]);
   const addG=(g)=>{const n=[...gastos,{...g,id:Date.now()}];setGastos(n);saveG(n);};
   const delG=(id)=>{const n=gastos.filter(g=>g.id!==id);setGastos(n);saveG(n);};
   const editG=(g)=>{const n=gastos.map(x=>x.id===g.id?g:x);setGastos(n);saveG(n);};
@@ -334,6 +338,8 @@ function App(){
     const n=comisiones.filter(c=>c.id!==id);
     setComisiones(n);saveC(n);
   };
+  const addA=(a)=>{const n=[...anticipos,{...a,id:Date.now(),fecha:today()}];setAnticipos(n);saveA(n);};
+  const delA=(id)=>{const n=anticipos.filter(a=>a.id!==id);setAnticipos(n);saveA(n);};
   return h("div",{style:S.root},
     h("header",{style:S.header},
       h("div",{style:S.hInner},
@@ -348,8 +354,8 @@ function App(){
           h("button",{style:{padding:"6px 12px",borderRadius:8,border:"none",background:getApiKey()?"rgba(255,255,255,.12)":"#DC2626",color:"#fff",cursor:"pointer",fontWeight:600,fontSize:12},onClick:()=>setShowCfg(true)},"API"))),
     h("main",{style:S.main},
       vista==="ing"
-        ?h(VistaIng,{onAddG:addG,onEditG:editG,onAddC:addC,onDelC:delC,gastos,comisiones})
-        :h(VistaCon,{gastos,comisiones,onDelG:delG,onEditG:editG})),
+        ?h(VistaIng,{onAddG:addG,onEditG:editG,onAddC:addC,onDelC:delC,gastos,comisiones,anticipos})
+        :h(VistaCon,{gastos,comisiones,anticipos,onDelG:delG,onEditG:editG,onAddA:addA,onDelA:delA})),
     showCfg?h("div",{style:S.modalBg},
       h("div",{style:S.modal},
         h("div",{style:S.modalTitle},"Configurar API Key"),
@@ -369,7 +375,7 @@ function App(){
 }
 
 //  Vista Ingeniero 
-function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones}){
+function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
   const EG={ing:INGENIEROS[0],comId:"",est:"",nit:"",fac:"",con:CONCEPTOS[0],sub:"",iva:"",fp:today(),mp:"EFECTIVO"};
   const [f,setF]=useState(EG);
   const [editId,setEditId]=useState(null);
@@ -431,6 +437,10 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones}){
   const gastosIng=gastos.filter(g=>g.ing===f.ing);
   const total=gastosIng.reduce((s,g)=>s+num(g.tc),0);
   const comLabel=(id)=>{const c=comisiones.find(x=>x.id===id);return c?c.cli+" - CC "+c.cc:""};
+  const anticiposIng=(anticipos||[]).filter(a=>a.ing===f.ing);
+  const totalAnticipo=anticiposIng.reduce((s,a)=>s+num(a.valor),0);
+  const saldo=totalAnticipo-total;
+  const pct=totalAnticipo>0?Math.min(100,Math.round((total/totalAnticipo)*100)):0;
 
   return h("div",{style:S.col},
 
@@ -521,6 +531,25 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones}){
         ok?"Guardado":editId?"Guardar Cambios":"Guardar Gasto")),
 
     // Tabla de gastos por ingeniero
+    totalAnticipo>0&&h(Card,{title:"Balance del Anticipo"},
+      h("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:10}},
+          h("div",{style:{background:"#EFF6FF",borderRadius:10,padding:"12px 16px",borderLeft:"4px solid #0F4C81"}},
+            h("div",{style:{fontSize:11,fontWeight:600,color:"#6B7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}},"Anticipo Total"),
+            h("div",{style:{fontWeight:900,fontSize:18,color:"#0F4C81"}},fmt(totalAnticipo))),
+          h("div",{style:{background:"#FEF3C7",borderRadius:10,padding:"12px 16px",borderLeft:"4px solid #F59E0B"}},
+            h("div",{style:{fontSize:11,fontWeight:600,color:"#6B7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}},"Gastado"),
+            h("div",{style:{fontWeight:900,fontSize:18,color:"#B45309"}},fmt(total))),
+          h("div",{style:{background:saldo>=0?"#D1FAE5":"#FEE2E2",borderRadius:10,padding:"12px 16px",borderLeft:"4px solid "+(saldo>=0?"#065F46":"#DC2626")}},
+            h("div",{style:{fontSize:11,fontWeight:600,color:"#6B7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}},saldo>=0?"Disponible":"Excedido"),
+            h("div",{style:{fontWeight:900,fontSize:18,color:saldo>=0?"#065F46":"#DC2626"}},fmt(Math.abs(saldo))))),
+        h("div",{style:{marginTop:4}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:12,color:"#6B7280",marginBottom:4}},
+            h("span",null,"Ejecucion del anticipo"),
+            h("span",null,pct+"%")),
+          h("div",{style:{background:"#E2E8F0",borderRadius:20,height:8,overflow:"hidden"}},
+            h("div",{style:{width:pct+"%",height:"100%",background:pct<80?"#0F4C81":pct<100?"#F59E0B":"#DC2626",borderRadius:20,transition:"width .3s"}}))))),
+
     gastosIng.length>0&&h(Card,{title:"Gastos Registrados - "+f.ing},
       h(Tabla,{gastos:gastosIng,comisiones,onEdit:cargarEdicion}),
       h("div",{style:S.resumen},"Total: ",h("strong",null,fmt(total))," \u00B7 ",gastosIng.length," gastos"),
@@ -528,8 +557,9 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones}){
 }
 
 //  Vista Contabilidad 
-function VistaCon({gastos,comisiones,onDelG,onEditG}){
+function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA}){
   const [fi,setFi]=useState("TODOS");
+  const [newAnt,setNewAnt]=useState({ing:INGENIEROS[0],valor:"",nota:""});
   const [fc,setFc]=useState("TODOS");
   const [fcom,setFcom]=useState("TODOS");
   const [fd,setFd]=useState("");
@@ -556,7 +586,41 @@ function VistaCon({gastos,comisiones,onDelG,onEditG}){
   const porIng=INGENIEROS.map(ing=>({n:ing,t:gastos.filter(g=>g.ing===ing).reduce((s,g)=>s+num(g.tc),0),c:gastos.filter(g=>g.ing===ing).length})).filter(i=>i.c>0);
   const comLabel=(id)=>{const c=comisiones.find(x=>x.id===id);return c?(c.cli+" CC"+c.cc):""};
 
+  const anticiposA=anticipos||[];
+  const registrarAnticipo=()=>{
+    if(!newAnt.valor||!newAnt.ing)return;
+    onAddA({ing:newAnt.ing,valor:num(newAnt.valor),nota:newAnt.nota});
+    setNewAnt({ing:INGENIEROS[0],valor:"",nota:""});
+  };
+
   return h("div",{style:S.col},
+    h(Card,{title:"Recargas de Anticipo"},
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"12px 16px",marginBottom:16}},
+        h("div",null,
+          h("label",{style:S.lbl},"Ingeniero"),
+          h("select",{style:S.inp,value:newAnt.ing,onChange:function(e){setNewAnt(function(p){return{...p,ing:e.target.value};});}},
+            INGENIEROS.map(function(i){return h("option",{key:i},i);}))),
+        h("div",null,
+          h("label",{style:S.lbl},"Valor del Anticipo (COP)"),
+          h("input",{style:S.inp,type:"number",value:newAnt.valor,
+            onChange:function(e){setNewAnt(function(p){return{...p,valor:e.target.value};});},placeholder:"Ej: 500000"})),
+        h("div",null,
+          h("label",{style:S.lbl},"Nota (opcional)"),
+          h("input",{style:S.inp,value:newAnt.nota,
+            onChange:function(e){setNewAnt(function(p){return{...p,nota:e.target.value};});},placeholder:"Ej: Anticipo inicial"}))),
+      h("button",{style:{...S.btnSm,background:"#FF6B35",color:"#fff",padding:"10px 20px"},onClick:registrarAnticipo},"+ Registrar Anticipo"),
+      anticiposA.length>0&&h("div",{style:{marginTop:16}},
+        h("div",{style:{fontSize:12,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}},"Anticipos Registrados"),
+        h("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+          anticiposA.map(function(a){
+            return h("div",{key:a.id,style:{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#F8FAFC",borderRadius:8,padding:"8px 12px",border:"1px solid #E2E8F0"}},
+              h("div",null,
+                h("span",{style:{fontWeight:700,color:"#0F4C81",marginRight:8}},a.ing.split(" ")[0]),
+                h("span",{style:{fontWeight:700,color:"#065F46"}},fmt(a.valor)),
+                a.nota&&h("span",{style:{color:"#9CA3AF",fontSize:12,marginLeft:8}}," - "+a.nota),
+                h("span",{style:{color:"#9CA3AF",fontSize:12,marginLeft:8}},a.fecha)),
+              h("button",{style:S.btnDel,onClick:function(){onDelA(a.id);}},"✕"));
+          })))),
     h("div",{style:S.kpiRow},
       h(Kpi,{label:"Total Gastos",value:fmt(totF),icon:"",color:"#0F4C81"}),
       h(Kpi,{label:"Efectivo / Contado",value:fmt(totEf),icon:"",color:"#047857"}),
