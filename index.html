@@ -382,7 +382,7 @@ function App(){
     h("main",{style:S.main},
       vista==="ing"
         ?h(VistaIng,{onAddG:addG,onEditG:editG,onAddC:addC,onDelC:delC,gastos,comisiones,anticipos})
-        :h(VistaCon,{gastos,comisiones,anticipos,onDelG:delG,onEditG:editG,onAddA:addA,onDelA:delA})),
+        :h(VistaCon,{gastos,comisiones,anticipos,onDelG:delG,onEditG:editG,onAddA:addA,onDelA:delA,onAddC:addC,onDelC:delC})),
     showCfg?h("div",{style:S.modalBg},
       h("div",{style:S.modal},
         h("div",{style:S.modalTitle},"Configurar API Key"),
@@ -457,9 +457,9 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
     window.scrollTo({top:0,behavior:"smooth"});
   };
 
-  const crearComision=()=>{
+  const crearComision=async()=>{
     if(!newCom.cli||!newCom.cc)return;
-    onAddC({...newCom,ing:f.ing});
+    await onAddC({...newCom,ing:f.ing});
     setNewCom({cli:"",cc:""});setShowNuevaCom(false);
   };
 
@@ -585,9 +585,11 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
 }
 
 //  Vista Contabilidad 
-function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA}){
+function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAddC,onDelC}){
   const [fi,setFi]=useState("TODOS");
   const [newAnt,setNewAnt]=useState({ing:INGENIEROS[0],comId:"",valor:"",nota:""});
+  const [newProy,setNewProy]=useState({ing:INGENIEROS[0],cli:"",cc:""});
+  const [showNuevaProy,setShowNuevaProy]=useState(false);
   const [fc,setFc]=useState("TODOS");
   const [fcom,setFcom]=useState("TODOS");
   const [fd,setFd]=useState("");
@@ -615,6 +617,13 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA}){
   const comLabel=(id)=>{const c=comisiones.find(x=>x.id===id);return c?(c.cli+" CC"+c.cc):""};
 
   const anticiposA=anticipos||[];
+  const crearProyecto=async()=>{
+    if(!newProy.cli||!newProy.cc)return;
+    await onAddC({...newProy});
+    setNewProy({ing:INGENIEROS[0],cli:"",cc:""});
+    setShowNuevaProy(false);
+  };
+
   const registrarAnticipo=async()=>{
     if(!newAnt.valor||!newAnt.ing)return;
     await onAddA({ing:newAnt.ing,comId:Number(newAnt.comId)||null,valor:num(newAnt.valor),nota:newAnt.nota,fecha:today()});
@@ -623,6 +632,40 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA}){
   const comisionesIng=comisiones.filter(c=>c.ing===newAnt.ing);
 
   return h("div",{style:S.col},
+    h(Card,{title:"Proyectos Activos"},
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
+        h("div",{style:{fontSize:13,color:"var(--text-secondary)"}},comisiones.length+" proyectos registrados"),
+        h("button",{style:{...S.btnSm,background:"#FF6B35",color:"#fff"},onClick:()=>setShowNuevaProy(true)},"+ Nuevo Proyecto")),
+      comisiones.length===0
+        ?h("div",{style:S.empty},"No hay proyectos creados aun.")
+        :h("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+          comisiones.map(function(com){
+            const gastosC=gastos.filter(g=>g.com_id===com.id||g.com_id===String(com.id));
+            const totalC=gastosC.reduce(function(s,g){return s+num(g.tc);},0);
+            const antC=(anticipos||[]).filter(a=>a.com_id===com.id);
+            const totalAntC=antC.reduce(function(s,a){return s+num(a.valor);},0);
+            return h("div",{key:com.id,style:{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#F8FAFC",borderRadius:8,padding:"10px 14px",border:"1px solid #E2E8F0"}},
+              h("div",null,
+                h("span",{style:{fontWeight:700,color:"#0F4C81",marginRight:8}},com.cli),
+                h("span",{style:{background:"#0F4C81",color:"#fff",padding:"2px 8px",borderRadius:6,fontSize:11,fontWeight:700,marginRight:8}},"CC "+com.cc),
+                h("span",{style:{fontSize:12,color:"#6B7280"}}," "+com.ing.split(" ")[0]+" • "+gastosC.length+" gastos"),
+                totalAntC>0&&h("span",{style:{fontSize:12,color:"#065F46",marginLeft:8}}," Anticipo: "+fmt(totalAntC)+" • Gastado: "+fmt(totalC))),
+              h("button",{style:S.btnDel,onClick:function(){onDelC(com.id);}},"✕"));
+          })),
+      showNuevaProy&&h("div",{style:{marginTop:16,background:"#EFF6FF",borderRadius:12,padding:"14px 16px",border:"1px solid #BFDBFE"}},
+        h("div",{style:{fontWeight:700,color:"#0F4C81",marginBottom:12,fontSize:14}},"Nuevo Proyecto"),
+        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:"10px 14px",marginBottom:12}},
+          h("div",null,h("label",{style:S.lbl},"Ingeniero"),
+            h("select",{style:S.inp,value:newProy.ing,onChange:function(e){setNewProy(function(p){return{...p,ing:e.target.value};});}},
+              INGENIEROS.map(function(i){return h("option",{key:i},i);}))),
+          h("div",null,h("label",{style:S.lbl},"Cliente"),
+            h("input",{style:S.inp,value:newProy.cli,onChange:function(e){setNewProy(function(p){return{...p,cli:e.target.value};});},placeholder:"Nombre del cliente"})),
+          h("div",null,h("label",{style:S.lbl},"Centro de Costos"),
+            h("input",{style:S.inp,value:newProy.cc,onChange:function(e){setNewProy(function(p){return{...p,cc:e.target.value};});},placeholder:"Ej: 3-26"}))),
+        h("div",{style:{display:"flex",gap:10}},
+          h("button",{style:{...S.btnSm,background:"#0F4C81",color:"#fff"},onClick:crearProyecto},"Crear Proyecto"),
+          h("button",{style:{...S.btnSm,background:"#F1F5F9",color:"#6B7280"},onClick:()=>setShowNuevaProy(false)},"Cancelar")))),
+
     h(Card,{title:"Recargas de Anticipo"},
       h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:"12px 16px",marginBottom:12}},
         h("div",null,h("label",{style:S.lbl},"Ingeniero"),
