@@ -29,11 +29,22 @@ const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 
 const loadG=async()=>{const{data}=await sb.from("gastos").select("*").order("timestamp",{ascending:true});return data||[];};
 const saveG=async(gastos)=>{};
+const subirFoto=async(base64,mediaType,carpeta,nombre)=>{
+  try{
+    const blob=await fetch("data:"+mediaType+";base64,"+base64).then(r=>r.blob());
+    const path=carpeta+"/"+nombre;
+    const{error}=await sb.storage.from("evidencias").upload(path,blob,{contentType:mediaType,upsert:true});
+    if(error){console.error("Error subiendo foto:",error);return null;}
+    const{data}=sb.storage.from("evidencias").getPublicUrl(path);
+    return data.publicUrl;
+  }catch(e){console.error("Error foto:",e);return null;}
+};
+
 const addGasto=async(g)=>{await sb.from("gastos").insert([{
   ing:g.ing,com_id:g.comId||null,com_cli:g.comCli||null,com_cc:g.comCc||null,
   est:g.est,nit:g.nit,fac:g.fac,con:g.con,
   sub:Number(g.sub)||0,iva:Number(g.iva)||0,tc:Number(g.tc)||0,
-  fp:g.fp,mp:g.mp
+  fp:g.fp,mp:g.mp,foto_url:g.fotoUrl||null
 }]);};
 const delGasto=async(id)=>{await sb.from("gastos").delete().eq("id",id);};
 const editGasto=async(g)=>{await sb.from("gastos").update({
@@ -408,6 +419,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
   const [editId,setEditId]=useState(null);
   const [ocrs,setOcrs]=useState("idle");
   const [prev,setPrev]=useState(null);
+  const [fotoData,setFotoData]=useState(null);
   const [ok,setOk]=useState(false);
   const [errMsg,setErrMsg]=useState("");
   const [showNuevaCom,setShowNuevaCom]=useState(false);
@@ -423,6 +435,9 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
     const reader=new FileReader();
     reader.onload=async(ev)=>{
       const url=ev.target.result;
+      const b64=url.split(",")[1];
+      const mt=file.type||"image/jpeg";
+      setFotoData({b64,mt,file});
       setPrev(url);setOcrs("loading");setErrMsg("");
       try{
         const d=await ocr(url.split(",")[1],file.type||"image/jpeg");
@@ -442,11 +457,17 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
   const guardar=async()=>{
     if(!f.est||!f.sub||!f.comId)return;
     const com=misComisiones.find(x=>x.id===f.comId||x.id===Number(f.comId));
-    const gasto={...f,comId:f.comId,comCli:com?.cli||"",comCc:com?.cc||"",tc:tc()};
+    const carpeta=(com?(com.cli+"-CC"+com.cc):f.ing).replace(/[^a-zA-Z0-9-_]/g,"-").slice(0,50);
+    const nombre=f.ing.split(" ")[0]+"_"+f.est.replace(/[^a-zA-Z0-9]/g,"-").slice(0,20)+"_"+f.fp+".jpg";
+    let fotoUrl=null;
+    if(fotoData&&!editId){
+      fotoUrl=await subirFoto(fotoData.b64,fotoData.mt,carpeta,nombre);
+    }
+    const gasto={...f,comId:f.comId,comCli:com?.cli||"",comCc:com?.cc||"",tc:tc(),fotoUrl};
     if(editId){ await onEditG({...gasto,id:editId}); setEditId(null); }
     else { await onAddG({...gasto,timestamp:new Date().toISOString()}); }
     setF(p=>({...p,est:"",nit:"",fac:"",con:CONCEPTOS[0],sub:"",iva:"",fp:today()}));
-    setPrev(null);setOcrs("idle");
+    setPrev(null);setOcrs("idle");setFotoData(null);
     setOk(true);setTimeout(()=>setOk(false),2500);
   };
 
@@ -803,6 +824,7 @@ function Tabla({gastos,comisiones,onDel,onEdit,showIng}){
           h("td",{style:{...S.tdR,fontWeight:700,color:"#0F4C81"}},fmt(g.tc)),
           h("td",{style:S.td},h("span",{style:g.mp==="TARJETA"?S.tagTj:S.tagEf},g.mp)),
           h("td",{style:S.td},h("div",{style:{display:"flex",gap:4}},
+            g.foto_url&&h("a",{href:g.foto_url,target:"_blank",style:{...S.btnDel,background:"#D1FAE5",color:"#065F46",textDecoration:"none",padding:"3px 8px"}},""),
             onEdit&&h("button",{style:{...S.btnDel,background:"#EFF6FF",color:"#1D4ED8"},onClick:()=>onEdit(g)},""),
             onDel&&h("button",{style:S.btnDel,onClick:()=>onDel(g.id)},""))))))));
 }
