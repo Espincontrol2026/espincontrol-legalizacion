@@ -471,6 +471,17 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
   const saldo=totalAnticipo-total;
   const pct=totalAnticipo>0?Math.min(100,Math.round((total/totalAnticipo)*100)):0;
 
+  // Balance por proyecto
+  const balancePorProyecto=misComisiones.map(function(com){
+    const gastosC=gastosIng.filter(function(g){return g.com_id===com.id||g.com_id===String(com.id)||Number(g.com_id)===com.id;});
+    const antC=(anticipos||[]).filter(function(a){return a.com_id===com.id||a.com_id===String(com.id)||Number(a.com_id)===com.id;});
+    const gastado=gastosC.reduce(function(s,g){return s+num(g.tc);},0);
+    const anticipo=antC.reduce(function(s,a){return s+num(a.valor);},0);
+    const saldoC=anticipo-gastado;
+    const pctC=anticipo>0?Math.min(100,Math.round((gastado/anticipo)*100)):0;
+    return {com,gastado,anticipo,saldo:saldoC,pct:pctC,nGastos:gastosC.length};
+  }).filter(function(b){return b.anticipo>0||b.gastado>0;});
+
   return h("div",{style:S.col},
 
     // Selector ingeniero
@@ -560,24 +571,31 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
         ok?"Guardado":editId?"Guardar Cambios":"Guardar Gasto")),
 
     // Tabla de gastos por ingeniero
-    totalAnticipo>0&&h(Card,{title:"Balance del Anticipo"},
-      h("div",{style:{display:"flex",flexDirection:"column",gap:12}},
-        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}},
-          h("div",{style:{background:"#EFF6FF",borderRadius:10,padding:"12px 14px",borderLeft:"4px solid #0F4C81"}},
-            h("div",{style:{fontSize:11,fontWeight:600,color:"#6B7280",textTransform:"uppercase",marginBottom:4}},"Anticipo Total"),
-            h("div",{style:{fontWeight:900,fontSize:17,color:"#0F4C81"}},fmt(totalAnticipo))),
-          h("div",{style:{background:"#FEF3C7",borderRadius:10,padding:"12px 14px",borderLeft:"4px solid #F59E0B"}},
-            h("div",{style:{fontSize:11,fontWeight:600,color:"#6B7280",textTransform:"uppercase",marginBottom:4}},"Gastado"),
-            h("div",{style:{fontWeight:900,fontSize:17,color:"#B45309"}},fmt(total))),
-          h("div",{style:{background:saldo>=0?"#D1FAE5":"#FEE2E2",borderRadius:10,padding:"12px 14px",borderLeft:"4px solid "+(saldo>=0?"#065F46":"#DC2626")}},
-            h("div",{style:{fontSize:11,fontWeight:600,color:"#6B7280",textTransform:"uppercase",marginBottom:4}},saldo>=0?"Disponible":"Excedido"),
-            h("div",{style:{fontWeight:900,fontSize:17,color:saldo>=0?"#065F46":"#DC2626"}},fmt(Math.abs(saldo))))),
-        h("div",null,
-          h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:12,color:"#6B7280",marginBottom:4}},
-            h("span",null,"Ejecucion"),h("span",null,pct+"%")),
-          h("div",{style:{background:"#E2E8F0",borderRadius:20,height:8,overflow:"hidden"}},
-            h("div",{style:{width:pct+"%",height:"100%",background:pct<80?"#0F4C81":pct<100?"#F59E0B":"#DC2626",borderRadius:20}}))))),
-
+    balancePorProyecto.length>0&&h(Card,{title:"Balance por Proyecto"},
+      h("div",{style:{display:"flex",flexDirection:"column",gap:14}},
+        balancePorProyecto.map(function(b){
+          return h("div",{key:b.com.id,style:{background:"#F8FAFC",borderRadius:12,padding:"14px 16px",border:"1px solid #E2E8F0"}},
+            h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:10}},
+              h("span",{style:{fontWeight:800,color:"#0F4C81",fontSize:14}},b.com.cli),
+              h("span",{style:{background:"#0F4C81",color:"#fff",padding:"2px 8px",borderRadius:6,fontSize:11,fontWeight:700}},"CC "+b.com.cc),
+              h("span",{style:{fontSize:12,color:"#9CA3AF",marginLeft:"auto"}},b.nGastos+" gastos")),
+            h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}},
+              h("div",{style:{background:"#EFF6FF",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid #0F4C81"}},
+                h("div",{style:{fontSize:10,fontWeight:600,color:"#6B7280",textTransform:"uppercase",marginBottom:3}},"Anticipo"),
+                h("div",{style:{fontWeight:900,fontSize:15,color:"#0F4C81"}},fmt(b.anticipo))),
+              h("div",{style:{background:"#FEF3C7",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid #F59E0B"}},
+                h("div",{style:{fontSize:10,fontWeight:600,color:"#6B7280",textTransform:"uppercase",marginBottom:3}},"Gastado"),
+                h("div",{style:{fontWeight:900,fontSize:15,color:"#B45309"}},fmt(b.gastado))),
+              h("div",{style:{background:b.saldo>=0?"#D1FAE5":"#FEE2E2",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid "+(b.saldo>=0?"#065F46":"#DC2626")}},
+                h("div",{style:{fontSize:10,fontWeight:600,color:"#6B7280",textTransform:"uppercase",marginBottom:3}},b.saldo>=0?"Disponible":"Excedido"),
+                h("div",{style:{fontWeight:900,fontSize:15,color:b.saldo>=0?"#065F46":"#DC2626"}},fmt(Math.abs(b.saldo))))),
+            h("div",null,
+              h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:11,color:"#6B7280",marginBottom:3}},
+                h("span",null,"Ejecucion del anticipo"),
+                h("span",null,b.pct+"%")),
+              h("div",{style:{background:"#E2E8F0",borderRadius:20,height:6,overflow:"hidden"}},
+                h("div",{style:{width:b.pct+"%",height:"100%",background:b.pct<80?"#0F4C81":b.pct<100?"#F59E0B":"#DC2626",borderRadius:20}}))));
+        }))),
     gastosIng.length>0&&h(Card,{title:"Gastos Registrados - "+f.ing},
       h(Tabla,{gastos:gastosIng,comisiones,onEdit:cargarEdicion}),
       h("div",{style:S.resumen},"Total: ",h("strong",null,fmt(total))," \u00B7 ",gastosIng.length," gastos"),
