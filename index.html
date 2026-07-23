@@ -173,7 +173,7 @@ function exportarExcel(gastos,comisiones,ingeniero){
   };
 
   comisiones.forEach(com=>{
-    const gg=gastos.filter(g=>g.comId===com.id&&g.ing===ingeniero);
+    const gg=gastos.filter(g=>(g.com_id===com.id||g.com_id===String(com.id)||Number(g.com_id)===com.id)&&g.ing===ingeniero);
     if(!gg.length)return;
     const ef=gg.filter(g=>g.mp==="EFECTIVO").reduce((s,g)=>s+num(g.tc),0);
     const tj=gg.filter(g=>g.mp==="TARJETA").reduce((s,g)=>s+num(g.tc),0);
@@ -310,7 +310,7 @@ function exportarExcel(gastos,comisiones,ingeniero){
 
   let totEf=0,totTj=0,totIVA=0,totN=0;
   comisiones.forEach((com,ci)=>{
-    const gg=gastos.filter(g=>g.comId===com.id&&g.ing===ingeniero);
+    const gg=gastos.filter(g=>(g.com_id===com.id||g.com_id===String(com.id)||Number(g.com_id)===com.id)&&g.ing===ingeniero);
     if(!gg.length)return;
     const ef=gg.filter(g=>g.mp==="EFECTIVO").reduce((s,g)=>s+num(g.tc),0);
     const tj=gg.filter(g=>g.mp==="TARJETA").reduce((s,g)=>s+num(g.tc),0);
@@ -620,7 +620,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
     gastosIng.length>0&&h(Card,{title:"Gastos Registrados - "+f.ing},
       h(Tabla,{gastos:gastosIng,comisiones,onEdit:cargarEdicion}),
       h("div",{style:S.resumen},"Total: ",h("strong",null,fmt(total))," \u00B7 ",gastosIng.length," gastos"),
-      h("button",{style:S.btnBlue,onClick:()=>exportarExcel(gastosIng,misComisiones,f.ing)},"Exportar Excel FO-AF-002")));
+      h("button",{style:S.btnBlue,onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing)},"Exportar Excel FO-AF-002")));
 }
 
 //  Vista Contabilidad 
@@ -787,7 +787,7 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
               const ings=[...new Set(filt.map(g=>g.ing))];
               ings.forEach(ing=>{
                 const gc=filt.filter(g=>g.ing===ing);
-                const cc=comisiones.filter(c=>c.ing===ing&&gc.some(g=>g.comId===c.id));
+                const cc=comisiones.filter(c=>gc.some(g=>Number(g.com_id)===c.id||g.com_id===String(c.id)));
                 exportarExcel(gc,cc,ing);
               });
               setModal(false);
