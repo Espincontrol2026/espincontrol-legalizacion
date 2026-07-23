@@ -8,6 +8,7 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -57,7 +58,37 @@ const editGasto=async(g)=>{await sb.from("gastos").update({
 const loadC=async()=>{const{data}=await sb.from("comisiones").select("*").order("created_at",{ascending:true});return data||[];};
 const saveC=async(c)=>{};
 const addComision=async(com)=>{const{data,error}=await sb.from("comisiones").insert([{ing:com.ing||"",cli:com.cli,cc:com.cc}]).select();if(error)console.error("Error creando proyecto:",error);return data?.[0];};
-const delComision=async(id)=>{await sb.from("comisiones").delete().eq("id",id);};
+const delComision=async(id,comisiones,gastos)=>{
+  try{
+    // Buscar la comision para construir el nombre de carpeta
+    const com=comisiones.find(x=>x.id===id);
+    if(com){
+      const carpeta=(com.cli+"-CC"+com.cc).replace(/[^a-zA-Z0-9-_]/g,"-").slice(0,50);
+      // Listar y borrar todas las fotos de esa carpeta
+      const{data:archivos}=await sb.storage.from("evidencias").list(carpeta);
+      if(archivos&&archivos.length>0){
+        const paths=archivos.map(f=>carpeta+"/"+f.name);
+        await sb.storage.from("evidencias").remove(paths);
+        console.log("Fotos eliminadas:",paths.length);
+      }
+      // Intentar borrar tambien por nombre de carpeta con gastos
+      const gastosComision=(gastos||[]).filter(g=>Number(g.com_id)===id||g.com_id===String(id));
+      // Borrar fotos referenciadas en gastos
+      const fotoPaths=gastosComision.filter(g=>g.foto_url).map(g=>{
+        const url=g.foto_url;
+        const idx=url.indexOf("/evidencias/");
+        return idx>=0?decodeURIComponent(url.slice(idx+12)):null;
+      }).filter(Boolean);
+      if(fotoPaths.length>0){
+        await sb.storage.from("evidencias").remove(fotoPaths);
+      }
+    }
+  }catch(e){console.error("Error borrando fotos:",e);}
+  // Borrar anticipos del proyecto
+  await sb.from("anticipos").delete().eq("com_id",id);
+  // Borrar la comision
+  await sb.from("comisiones").delete().eq("id",id);
+};
 
 const loadA=async()=>{const{data}=await sb.from("anticipos").select("*").order("fecha",{ascending:true});return data||[];};
 const addAnticipo=async(a)=>{await sb.from("anticipos").insert([{ing:a.ing,com_id:a.comId||null,valor:Number(a.valor),nota:a.nota||"",fecha:a.fecha}]);};
@@ -329,13 +360,39 @@ function exportarExcel(gastos,comisiones,ingeniero){
   });
   [4,5,6,7].forEach(col=>{ totR.getCell(col).numFmt='"$"#,##0'; totR.getCell(col).alignment={horizontal:"right"}; });
 
-  // Exportar
-  wb.xlsx.writeBuffer().then(function(buffer){
-    const blob=new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-    const url=URL.createObjectURL(blob);
+  // Exportar como ZIP con Excel + fotos
+  wb.xlsx.writeBuffer().then(async function(buffer){
+    const zip=new JSZip();
+    const nombreBase="Legalizacion_"+ingeniero.replace(/ /g,"_")+"_"+today();
+
+    // Agregar Excel al ZIP
+    zip.file(nombreBase+".xlsx",buffer);
+
+    // Agregar fotos por proyecto
+    const fotoPromesas=[];
+    comisiones.forEach(function(com){
+      const gg=gastos.filter(function(g){return(Number(g.com_id)===com.id||g.com_id===String(com.id))&&g.ing===ingeniero;});
+      gg.forEach(function(g){
+        if(g.foto_url){
+          const carpetaZip=com.cli.replace(/[^a-zA-Z0-9]/g,"-")+"-CC"+com.cc;
+          const ext=g.foto_url.includes(".png")?"png":g.foto_url.includes(".webp")?"webp":"jpg";
+          const nombreFoto=(g.est||"recibo").replace(/[^a-zA-Z0-9]/g,"-").slice(0,20)+"_"+g.fp+"."+ext;
+          const p=fetch(g.foto_url)
+            .then(function(r){return r.arrayBuffer();})
+            .then(function(ab){zip.folder(carpetaZip).file(nombreFoto,ab);})
+            .catch(function(e){console.warn("No se pudo descargar foto:",e);});
+          fotoPromesas.push(p);
+        }
+      });
+    });
+
+    await Promise.all(fotoPromesas);
+
+    const zipBlob=await zip.generateAsync({type:"blob"});
+    const url=URL.createObjectURL(zipBlob);
     const a=document.createElement("a");
     a.href=url;
-    a.download="Legalizacion_"+ingeniero.replace(/ /g,"_")+"_"+today()+".xlsx";
+    a.download=nombreBase+".zip";
     a.click();
     URL.revokeObjectURL(url);
   });
@@ -374,7 +431,7 @@ function App(){
   const delG=async(id)=>{await delGasto(id);await recargar();};
   const editG=async(g)=>{await editGasto(g);await recargar();};
   const addC=async(com)=>{await addComision(com);await recargar();};
-  const delC=async(id)=>{await delComision(id);await recargar();};
+  const delC=async(id)=>{await delComision(id,comisiones,gastos);await recargar();};
   const addA=async(a)=>{await addAnticipo(a);await recargar();};
   const delA=async(id)=>{await delAnticipo(id);await recargar();};
   if(loading) return h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",gap:12,color:"var(--text-secondary)",fontFamily:"Segoe UI,sans-serif"}},h("div",{style:{width:20,height:20,border:"3px solid #E2E8F0",borderTop:"3px solid #0F4C81",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}),h("span",null,"Cargando datos..."));
