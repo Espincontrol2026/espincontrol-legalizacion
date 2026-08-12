@@ -466,7 +466,7 @@ function App(){
         h("button",{style:{padding:"14px",background:"#0F4C81",color:"#fff",border:"none",borderRadius:10,fontWeight:700,fontSize:15,cursor:"pointer"},
           onClick:function(){setPerfil("ing");localStorage.setItem("espincontrol_perfil","ing");}},"Soy Ingeniero de Campo"),
         h("button",{style:{padding:"14px",background:"#FF6B35",color:"#fff",border:"none",borderRadius:10,fontWeight:700,fontSize:15,cursor:"pointer"},
-          onClick:function(){setPerfil("con");localStorage.setItem("espincontrol_perfil","con");}},"Soy Contabilidad"))));
+          onClick:function(){setPerfil("con");setVista("con");localStorage.setItem("espincontrol_perfil","con");}},"Soy Contabilidad"))));
 
   return h("div",{style:S.root},
     h("header",{style:S.header},
