@@ -205,11 +205,11 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos){
   };
 
   comisiones.forEach(com=>{
-    const gg=gastos.filter(g=>(g.com_id===com.id||g.com_id===String(com.id)||Number(g.com_id)===com.id)&&g.ing===ingeniero);
+    const gg=gastos.filter(g=>Number(g.com_id)===Number(com.id));
     if(!gg.length)return;
     const ef=gg.filter(g=>g.mp==="EFECTIVO").reduce((s,g)=>s+num(g.tc),0);
     const tj=gg.filter(g=>g.mp==="TARJETA").reduce((s,g)=>s+num(g.tc),0);
-    const antCom=(anticipos||[]).filter(a=>Number(a.com_id)===Number(com.id)&&a.ing===ingeniero);
+    const antCom=(anticipos||[]).filter(a=>Number(a.com_id)===Number(com.id));
     const totalAnt=antCom.reduce((s,a)=>s+num(a.valor),0);
     const saldoAnt=totalAnt-(ef+tj);
 
@@ -360,7 +360,7 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos){
 
   let totEf=0,totTj=0,totIVA=0,totN=0;
   comisiones.forEach((com,ci)=>{
-    const gg=gastos.filter(g=>(g.com_id===com.id||g.com_id===String(com.id)||Number(g.com_id)===com.id)&&g.ing===ingeniero);
+    const gg=gastos.filter(g=>Number(g.com_id)===Number(com.id));
     if(!gg.length)return;
     const ef=gg.filter(g=>g.mp==="EFECTIVO").reduce((s,g)=>s+num(g.tc),0);
     const tj=gg.filter(g=>g.mp==="TARJETA").reduce((s,g)=>s+num(g.tc),0);
@@ -510,6 +510,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
   const EG={ing:INGENIEROS[0],comId:"",est:"",nit:"",fac:"",con:CONCEPTOS[0],sub:"",iva:"",fp:today(),mp:"EFECTIVO"};
   const [f,setF]=useState(EG);
   const [editId,setEditId]=useState(null);
+  const [filtProy,setFiltProy]=useState("TODOS");
   const [ocrs,setOcrs]=useState("idle");
   const [prev,setPrev]=useState(null);
   const [fotoData,setFotoData]=useState(null);
@@ -587,16 +588,20 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
   const saldo=totalAnticipo-total;
   const pct=totalAnticipo>0?Math.min(100,Math.round((total/totalAnticipo)*100)):0;
 
-  // Balance por proyecto
+  // Balance de anticipos por proyecto
+  const anticiposMios=(anticipos||[]).filter(function(a){return a.ing===f.ing;});
   const balancePorProyecto=misComisiones.map(function(com){
     const gastosC=gastosIng.filter(function(g){return Number(g.com_id)===Number(com.id);});
-    const antC=(anticipos||[]).filter(function(a){return a.com_id===com.id||a.com_id===String(com.id)||Number(a.com_id)===com.id;});
+    const antC=anticiposMios.filter(function(a){return Number(a.com_id)===Number(com.id);});
     const gastado=gastosC.reduce(function(s,g){return s+num(g.tc);},0);
     const anticipo=antC.reduce(function(s,a){return s+num(a.valor);},0);
     const saldoC=anticipo-gastado;
     const pctC=anticipo>0?Math.min(100,Math.round((gastado/anticipo)*100)):0;
-    return {com,gastado,anticipo,saldo:saldoC,pct:pctC,nGastos:gastosC.length};
+    return {com,gastado,anticipo,saldo:saldoC,pct:pctC,nGastos:gastosC.length,nAnticipos:antC.length};
   }).filter(function(b){return b.anticipo>0||b.gastado>0;});
+  // Anticipos sin proyecto especifico
+  const antSinProy=anticiposMios.filter(function(a){return !a.com_id;});
+  const totalAntSinProy=antSinProy.reduce(function(s,a){return s+num(a.valor);},0);
 
   return h("div",{style:S.col},
 
@@ -713,7 +718,17 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
                 h("div",{style:{width:b.pct+"%",height:"100%",background:b.pct<80?"#0F4C81":b.pct<100?"#F59E0B":"#DC2626",borderRadius:20}}))));
         }))),
     gastosIng.length>0&&h(Card,{title:"Gastos Registrados - "+f.ing},
-      h(Tabla,{gastos:gastosIng,comisiones,onEdit:cargarEdicion}),
+      h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12,alignItems:"flex-end"}},
+        h("div",null,
+          h("label",{style:S.lbl},"Filtrar por Proyecto"),
+          h("select",{style:{...S.inp,maxWidth:280},value:filtProy,onChange:function(e){setFiltProy(e.target.value);}},
+            h("option",{value:"TODOS"},"Todos los proyectos"),
+            misComisiones.map(function(com){
+              return h("option",{key:com.id,value:com.id},com.cli+" - CC "+com.cc);
+            }))),
+        filtProy!=="TODOS"&&h("button",{style:{...S.btnSmGray,alignSelf:"flex-end"},
+          onClick:function(){setFiltProy("TODOS");}},"x Limpiar")),
+      h(Tabla,{gastos:filtProy==="TODOS"?gastosIng:gastosIng.filter(function(g){return Number(g.com_id)===Number(filtProy);}),comisiones,onEdit:cargarEdicion}),
       h("div",{style:S.resumen},"Total: ",h("strong",null,fmt(total))," \u00B7 ",gastosIng.length," gastos"),
       h("button",{style:S.btnBlue,onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos)},"Exportar Excel FO-AF-002")));
 }
