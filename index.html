@@ -170,10 +170,11 @@ async function ocr(base64,mediaType){
     method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
     body:JSON.stringify({model:"claude-haiku-4-5",max_tokens:500,
-      messages:[{role:"user",content:[
-        {type:"image",source:{type:"base64",media_type:mediaType,data:base64}},
-        {type:"text",text:prompt}
-      ]}]})
+      messages:[{role:"user",content:
+        mediaType==="application/pdf"
+          ?[{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}},{type:"text",text:prompt}]
+          :[{type:"image",source:{type:"base64",media_type:mediaType,data:base64}},{type:"text",text:prompt}]
+      }]})
   });
   if(!r.ok){const t=await r.text();throw new Error("HTTP "+r.status+": "+t.slice(0,80));}
   const d=await r.json();
@@ -184,7 +185,7 @@ async function ocr(base64,mediaType){
 }
 
 //  Excel 
-function exportarExcel(gastos,comisiones,ingeniero){
+function exportarExcel(gastos,comisiones,ingeniero,anticipos){
   const wb=new ExcelJS.Workbook();
   wb.creator="ESPINCONTROL";
 
@@ -208,6 +209,9 @@ function exportarExcel(gastos,comisiones,ingeniero){
     if(!gg.length)return;
     const ef=gg.filter(g=>g.mp==="EFECTIVO").reduce((s,g)=>s+num(g.tc),0);
     const tj=gg.filter(g=>g.mp==="TARJETA").reduce((s,g)=>s+num(g.tc),0);
+    const antCom=(anticipos||[]).filter(a=>Number(a.com_id)===Number(com.id)&&a.ing===ingeniero);
+    const totalAnt=antCom.reduce((s,a)=>s+num(a.valor),0);
+    const saldoAnt=totalAnt-(ef+tj);
 
     const nombre=(ingeniero.split(" ")[0]+" CC"+com.cc).slice(0,28);
     const ws=wb.addWorksheet(nombre);
@@ -249,6 +253,21 @@ function exportarExcel(gastos,comisiones,ingeniero){
       ws.getCell(addr).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+grisClaro}};
     });
     ws.getRow(3).height=16;
+
+    // Fila balance anticipo
+    ws.mergeCells("A4:C4");
+    ws.getCell("A4").value="BALANCE DE ANTICIPO";
+    ws.getCell("A4").font={bold:true,color:{argb:"FF"+blanco}};
+    ws.getCell("A4").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+azul}};
+    ws.getCell("D4").value="Anticipo: "+(totalAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ws.getCell("F4").value="Gastado: "+(ef+tj).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ws.getCell("H4").value=saldoAnt>=0?"Disponible:":"Excedido:";
+    ws.getCell("I4").value=Math.abs(saldoAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ["D4","F4","H4","I4"].forEach(addr=>{
+      ws.getCell(addr).font={bold:true,color:{argb:saldoAnt>=0?"FF065F46":"FFDC2626"}};
+      ws.getCell(addr).fill={type:"pattern",pattern:"solid",fgColor:{argb:saldoAnt>=0?"FFD1FAE5":"FFFEE2E2"}};
+    });
+    ws.getRow(4).height=16;
 
     // Fila vacia
     ws.addRow([]);
@@ -411,6 +430,7 @@ function Kpi({label,value,icon,color}){
 //  App 
 function App(){
   const [vista,setVista]=useState("ing");
+  const [perfil,setPerfil]=useState(localStorage.getItem("espincontrol_perfil")||"");
   const [gastos,setGastos]=useState([]);
   const [comisiones,setComisiones]=useState([]);
   const [anticipos,setAnticipos]=useState([]);
@@ -435,6 +455,19 @@ function App(){
   const addA=async(a)=>{await addAnticipo(a);await recargar();};
   const delA=async(id)=>{await delAnticipo(id);await recargar();};
   if(loading) return h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",gap:12,color:"var(--text-secondary)",fontFamily:"Segoe UI,sans-serif"}},h("div",{style:{width:20,height:20,border:"3px solid #E2E8F0",borderTop:"3px solid #0F4C81",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}),h("span",null,"Cargando datos..."));
+  // Pantalla de seleccion de perfil
+  if(!perfil) return h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"#F0F4F8",fontFamily:"'Segoe UI',sans-serif"}},
+    h("div",{style:{background:"#fff",borderRadius:20,padding:"40px 48px",boxShadow:"0 4px 32px rgba(0,0,0,.1)",textAlign:"center",maxWidth:380,width:"90%"}},
+      h("div",{style:{width:56,height:56,borderRadius:14,background:"#FF6B35",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:28,color:"#fff",margin:"0 auto 16px"}},"E"),
+      h("div",{style:{fontWeight:800,fontSize:20,color:"#0F4C81",marginBottom:4}},"ESPINCONTROL"),
+      h("div",{style:{fontSize:13,color:"#9CA3AF",marginBottom:32}},"Legalizacion de Anticipos"),
+      h("div",{style:{fontSize:14,fontWeight:600,color:"#374151",marginBottom:16}},"Selecciona tu perfil para continuar"),
+      h("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+        h("button",{style:{padding:"14px",background:"#0F4C81",color:"#fff",border:"none",borderRadius:10,fontWeight:700,fontSize:15,cursor:"pointer"},
+          onClick:function(){setPerfil("ing");localStorage.setItem("espincontrol_perfil","ing");}},"Soy Ingeniero de Campo"),
+        h("button",{style:{padding:"14px",background:"#FF6B35",color:"#fff",border:"none",borderRadius:10,fontWeight:700,fontSize:15,cursor:"pointer"},
+          onClick:function(){setPerfil("con");localStorage.setItem("espincontrol_perfil","con");}},"Soy Contabilidad"))));
+
   return h("div",{style:S.root},
     h("header",{style:S.header},
       h("div",{style:S.hInner},
@@ -442,19 +475,22 @@ function App(){
           h("div",{style:S.brandIcon},"E"),
           h("div",null,
             h("div",{style:S.brandName},"ESPINCONTROL"),
-            h("div",{style:S.brandSub},"Legalizaci\u00F3n de Anticipos"))),
-        h("div",{style:S.tabs},
-          h("button",{style:vista==="ing"?S.tabOn:S.tab,onClick:()=>setVista("ing")}," Ingeniero"),
-          h("button",{style:vista==="con"?S.tabOn:S.tab,onClick:()=>setVista("con")}," Contabilidad"),
-          h("button",{style:{padding:"6px 12px",borderRadius:8,border:"none",background:getApiKey()?"rgba(255,255,255,.12)":"#DC2626",color:"#fff",cursor:"pointer",fontWeight:600,fontSize:12},onClick:()=>setShowCfg(true)},"API"))),
+            h("div",{style:S.brandSub},"Legalizacion de Anticipos"))),
+        h("div",{style:{display:"flex",gap:6,alignItems:"center"}},
+          perfil==="ing"&&h("button",{style:vista==="ing"?S.tabOn:S.tab,onClick:()=>setVista("ing")},"Ingeniero"),
+          perfil==="con"&&h("button",{style:vista==="con"?S.tabOn:S.tab,onClick:()=>setVista("con")},"Contabilidad"),
+          perfil==="con"&&h("button",{style:vista==="ing"?S.tabOn:S.tab,onClick:()=>setVista("ing")},"Vista Ingeniero"),
+          h("button",{style:{padding:"6px 12px",borderRadius:8,border:"none",background:getApiKey()?"rgba(255,255,255,.12)":"#DC2626",color:"#fff",cursor:"pointer",fontWeight:600,fontSize:12},onClick:()=>setShowCfg(true)},"API"),
+          h("button",{style:{padding:"6px 12px",borderRadius:8,border:"none",background:"rgba(255,255,255,.12)",color:"#CBD5E1",cursor:"pointer",fontWeight:600,fontSize:11},
+            onClick:function(){setPerfil("");localStorage.removeItem("espincontrol_perfil");setVista("ing");}},"Salir")))),
     h("main",{style:S.main},
       vista==="ing"
-        ?h(VistaIng,{onAddG:addG,onEditG:editG,onAddC:addC,onDelC:delC,gastos,comisiones,anticipos})
+        ?h(VistaIng,{onAddG:addG,onEditG:editG,onAddC:addC,onDelC:delC,gastos,comisiones,anticipos,perfil})
         :h(VistaCon,{gastos,comisiones,anticipos,onDelG:delG,onEditG:editG,onAddA:addA,onDelA:delA,onAddC:addC,onDelC:delC})),
     showCfg?h("div",{style:S.modalBg},
       h("div",{style:S.modal},
         h("div",{style:S.modalTitle},"Configurar API Key"),
-        h("p",{style:{color:"#6B7280",fontSize:13,marginBottom:6}},"Ingresa tu API key de Anthropic (console.anthropic.com). Se guarda en este navegador."),
+        h("p",{style:{color:"#6B7280",fontSize:13,marginBottom:6}},"Ingresa tu API key de Anthropic. Se guarda en este navegador."),
         getApiKey()&&h("div",{style:{background:"#D1FAE5",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#065F46",marginBottom:10}},"API key activa"),
         h("input",{style:{...S.inp,marginBottom:12,fontFamily:"monospace",fontSize:12},type:"password",value:keyInput,
           onChange:function(e){setKeyInput(e.target.value);},placeholder:"sk-ant-api03-..."}),
@@ -466,11 +502,11 @@ function App(){
             }},keySaved?"Guardada!":"Guardar Key"),
           h("button",{style:{...S.btnOrange,marginTop:0,flex:1,background:"#F1F5F9",color:"#374151"},
             onClick:function(){setShowCfg(false);}},getApiKey()?"Cerrar":"Omitir"))))
-    :null));
+    :null);
 }
 
-//  Vista Ingeniero 
-function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
+
+function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perfil}){
   const EG={ing:INGENIEROS[0],comId:"",est:"",nit:"",fac:"",con:CONCEPTOS[0],sub:"",iva:"",fp:today(),mp:"EFECTIVO"};
   const [f,setF]=useState(EG);
   const [editId,setEditId]=useState(null);
@@ -489,13 +525,15 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
 
   const handleFoto=async(e)=>{
     const file=e.target.files[0];if(!file)return;
+    const isPdf=file.type==="application/pdf";
     const reader=new FileReader();
     reader.onload=async(ev)=>{
       const url=ev.target.result;
       const b64=url.split(",")[1];
       const mt=file.type||"image/jpeg";
       setFotoData({b64,mt,file});
-      setPrev(url);setOcrs("loading");setErrMsg("");
+      if(isPdf){setPrev(null);}else{setPrev(url);}
+      setOcrs("loading");setErrMsg("");
       try{
         const d=await ocr(url.split(",")[1],file.type||"image/jpeg");
         if(d.establecimiento||d.subtotal){
@@ -551,7 +589,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
 
   // Balance por proyecto
   const balancePorProyecto=misComisiones.map(function(com){
-    const gastosC=gastosIng.filter(function(g){return g.com_id===com.id||g.com_id===String(com.id)||Number(g.com_id)===com.id;});
+    const gastosC=gastosIng.filter(function(g){return Number(g.com_id)===Number(com.id);});
     const antC=(anticipos||[]).filter(function(a){return a.com_id===com.id||a.com_id===String(com.id)||Number(a.com_id)===com.id;});
     const gastado=gastosC.reduce(function(s,g){return s+num(g.tc);},0);
     const anticipo=antC.reduce(function(s,a){return s+num(a.valor);},0);
@@ -581,8 +619,8 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
                 h("span",{style:S.comTag},"CC "+c.cc),
                 h("span",{style:{...S.comTag,background:"#D1FAE5",color:"#065F46"}},
                   gastos.filter(g=>g.comId===c.id).length+" gastos"))),
-            h("button",{style:S.btnSmRed,onClick:()=>onDelC(c.id)},"Cerrar")))),
-      h("button",{style:{...S.btnSm,width:"100%"},onClick:()=>setShowNuevaCom(true)},"+ Nuevo Proyecto")),
+            perfil!=="ing"&&h("button",{style:S.btnSmRed,onClick:()=>onDelC(c.id)},"Cerrar")))),
+      perfil!=="ing"&&h("button",{style:{...S.btnSm,width:"100%"},onClick:()=>setShowNuevaCom(true)},"+ Nuevo Proyecto")),
 
     // Modal nueva comision
     showNuevaCom&&h("div",{style:S.modalBg},
@@ -609,7 +647,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
         ocrs==="loading"&&h("div",{style:S.ocrOv},h("div",{style:S.ocrSpin}),h("span",{style:{color:"#fff",fontWeight:600}},"Leyendo recibo con IA...")),
         ocrs==="done"&&h("div",{style:S.ocrBadge},"Datos extraidos automaticamente"),
         ocrs==="error"&&h("div",{style:{...S.ocrBadge,background:"#7F1D1D",maxWidth:"90%",textAlign:"center"}},errMsg?""+errMsg:"No se pudo leer")),
-      h("input",{ref,type:"file",accept:"image/*",style:{display:"none"},onChange:handleFoto})),
+      h("input",{ref,type:"file",accept:"image/*,application/pdf",style:{display:"none"},onChange:handleFoto})),
 
     // Datos del gasto
     h(Card,{title:"Datos del Gasto"},
@@ -677,7 +715,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos}){
     gastosIng.length>0&&h(Card,{title:"Gastos Registrados - "+f.ing},
       h(Tabla,{gastos:gastosIng,comisiones,onEdit:cargarEdicion}),
       h("div",{style:S.resumen},"Total: ",h("strong",null,fmt(total))," \u00B7 ",gastosIng.length," gastos"),
-      h("button",{style:S.btnBlue,onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing)},"Exportar Excel FO-AF-002")));
+      h("button",{style:S.btnBlue,onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos)},"Exportar Excel FO-AF-002")));
 }
 
 //  Vista Contabilidad 
@@ -845,7 +883,7 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
               ings.forEach(ing=>{
                 const gc=filt.filter(g=>g.ing===ing);
                 const cc=comisiones.filter(c=>gc.some(g=>Number(g.com_id)===c.id||g.com_id===String(c.id)));
-                exportarExcel(gc,cc,ing);
+                exportarExcel(gc,cc,ing,anticipos);
               });
               setModal(false);
             }}," Confirmar y Descargar"),
