@@ -855,7 +855,7 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
             h("th",{style:S.th},"Proyecto"),
             h("th",{style:{...S.thR}},"Anticipo Girado"),
             h("th",{style:{...S.thR}},"Total Gastado"),
-            h("th",{style:{...S.thR}},"Reembolso (Sobro)"),
+            h("th",{style:{...S.thR}},"Saldo a Favor Empleado"),
             h("th",{style:{...S.thR}},"Saldo a Favor ESPINCONTROL"))),
           h("tbody",null,
             INGENIEROS.map(function(ing){
@@ -867,15 +867,20 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
                 if(!gastosC.length&&!antC.length)return;
                 const gastado=gastosC.reduce(function(s,g){return s+num(g.tc);},0);
                 const anticipo=antC.reduce(function(s,a){return s+num(a.valor);},0);
-                const remb=anticipo>gastado?anticipo-gastado:0;
-                const saldo=gastado>anticipo?gastado-anticipo:0;
+                // Sin anticipo: empleado puso de su bolsillo -> favor empleado
+                // Anticipo > gastado: sobro -> favor ESPINCONTROL (debe devolver)
+                // Gastado > anticipo: gasto mas -> favor empleado (empresa le debe)
+                // Igual: cero en ambos
+                const diff=gastado-anticipo;
+                const favEmpleado=anticipo===0?gastado:diff>0?diff:0;
+                const favEspincontrol=anticipo>0&&diff<0?Math.abs(diff):0;
                 rows.push(h("tr",{key:ing+com.id,style:S.tr},
                   h("td",{style:S.td},h("strong",null,ing.split(" ")[0])),
                   h("td",{style:S.td},h("span",{style:S.badge},com.cli+" CC"+com.cc)),
                   h("td",{style:S.tdR},anticipo>0?fmt(anticipo):h("span",{style:{color:"#9CA3AF"}},"Sin anticipo")),
-                  h("td",{style:S.tdR},fmt(gastado)),
-                  h("td",{style:{...S.tdR,color:remb>0?"#065F46":"#9CA3AF",fontWeight:remb>0?700:400}},remb>0?fmt(remb):"$0"),
-                  h("td",{style:{...S.tdR,color:saldo>0?"#DC2626":"#065F46",fontWeight:700}},saldo>0?fmt(saldo):"$0")));
+                  h("td",{style:S.tdR},gastado>0?fmt(gastado):"$0"),
+                  h("td",{style:{...S.tdR,color:favEmpleado>0?"#065F46":"#374151",fontWeight:favEmpleado>0?700:400}},fmt(favEmpleado)),
+                  h("td",{style:{...S.tdR,color:favEspincontrol>0?"#065F46":"#374151",fontWeight:favEspincontrol>0?700:400}},fmt(favEspincontrol))));
               });
               // Sin proyecto
               const gastosGen=gastos.filter(function(g){return g.ing===ing&&!g.com_id;});
@@ -883,15 +888,16 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
               if(gastosGen.length||antGen.length){
                 const gastado=gastosGen.reduce(function(s,g){return s+num(g.tc);},0);
                 const anticipo=antGen.reduce(function(s,a){return s+num(a.valor);},0);
-                const remb=anticipo>gastado?anticipo-gastado:0;
-                const saldo=gastado>anticipo?gastado-anticipo:0;
+                const diff2=gastado-anticipo;
+                const favEmpleado2=anticipo===0?gastado:diff2>0?diff2:0;
+                const favEspincontrol2=anticipo>0&&diff2<0?Math.abs(diff2):0;
                 rows.push(h("tr",{key:ing+"gen",style:S.tr},
                   h("td",{style:S.td},h("strong",null,ing.split(" ")[0])),
                   h("td",{style:S.td},h("span",{style:{...S.badge,background:"#F1F5F9",color:"#6B7280"}},"Sin proyecto")),
                   h("td",{style:S.tdR},anticipo>0?fmt(anticipo):h("span",{style:{color:"#9CA3AF"}},"Sin anticipo")),
-                  h("td",{style:S.tdR},fmt(gastado)),
-                  h("td",{style:{...S.tdR,color:remb>0?"#065F46":"#9CA3AF",fontWeight:remb>0?700:400}},remb>0?fmt(remb):"$0"),
-                  h("td",{style:{...S.tdR,color:saldo>0?"#DC2626":"#065F46",fontWeight:700}},saldo>0?fmt(saldo):"$0")));
+                  h("td",{style:S.tdR},gastado>0?fmt(gastado):"$0"),
+                  h("td",{style:{...S.tdR,color:favEmpleado2>0?"#065F46":"#374151",fontWeight:favEmpleado2>0?700:400}},fmt(favEmpleado2)),
+                  h("td",{style:{...S.tdR,color:favEspincontrol2>0?"#065F46":"#374151",fontWeight:favEspincontrol2>0?700:400}},fmt(favEspincontrol2))));
               }
               return rows;
             }))))),
