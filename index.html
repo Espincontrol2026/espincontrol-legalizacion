@@ -479,7 +479,6 @@ function App(){
         h("div",{style:{display:"flex",gap:6,alignItems:"center"}},
           perfil==="ing"&&h("button",{style:vista==="ing"?S.tabOn:S.tab,onClick:()=>setVista("ing")},"Ingeniero"),
           perfil==="con"&&h("button",{style:vista==="con"?S.tabOn:S.tab,onClick:()=>setVista("con")},"Contabilidad"),
-          perfil==="con"&&h("button",{style:vista==="ing"?S.tabOn:S.tab,onClick:()=>setVista("ing")},"Vista Ingeniero"),
           h("button",{style:{padding:"6px 12px",borderRadius:8,border:"none",background:getApiKey()?"rgba(255,255,255,.12)":"#DC2626",color:"#fff",cursor:"pointer",fontWeight:600,fontSize:12},onClick:()=>setShowCfg(true)},"API"),
           h("button",{style:{padding:"6px 12px",borderRadius:8,border:"none",background:"rgba(255,255,255,.12)",color:"#CBD5E1",cursor:"pointer",fontWeight:600,fontSize:11},
             onClick:function(){setPerfil("");localStorage.removeItem("espincontrol_perfil");setVista("ing");}},"Salir")))),
@@ -848,98 +847,51 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
       h(Kpi,{label:"Tarjeta Corporativa",value:fmt(totTj),icon:"",color:"#7C3AED"}),
       h(Kpi,{label:"Total IVA",value:fmt(totIVA),icon:"",color:"#B45309"})),
 
-    h(Card,{title:"Control de Anticipo"},
-      h("div",{style:S.g2},
-        h(F,{label:"Valor del Anticipo Girado (COP)"},
-          h("input",{style:S.inp,type:"number",value:ant,onChange:e=>setAnt(e.target.value),placeholder:"Ingrese el valor del anticipo"})),
-        h(F,{label:"Total Gastado"},h("div",{style:{...S.inp,background:"#F1F5F9",fontWeight:700,color:"#0F4C81"}},fmt(totF))),
-        h(F,{label:"Reembolso (Sobr\u00F3)"},h("div",{style:{...S.inp,background:remb>0?"#D1FAE5":"#F1F5F9",fontWeight:700,color:remb>0?"#065F46":"#6B7280"}},fmt(remb))),
-        h(F,{label:"Saldo a Favor ESPINCONTROL"},h("div",{style:{...S.inp,background:salf>0?"#FEE2E2":"#F1F5F9",fontWeight:700,color:salf>0?"#DC2626":"#6B7280"}},fmt(salf))))),
-
-    porIng.length>0&&h("div",{style:S.kpiRow},
-      porIng.map(i=>h("div",{key:i.n,style:S.ingCard},
-        h("div",{style:{fontWeight:800,color:"#0F4C81",fontSize:14}},i.n),
-        h("div",{style:{fontWeight:900,fontSize:17,color:"#1E293B",marginTop:4}},fmt(i.t)),
-        h("div",{style:{fontSize:12,color:"#9CA3AF",marginTop:2}},i.c+" gastos")))),
-
-    h(Card,{title:"Registro de Gastos"},
-      h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12,alignItems:"flex-end"}},
-        h("div",null,h("div",{style:S.filtLbl},"Ingeniero"),
-          h("select",{style:S.inpSm,value:fi,onChange:e=>setFi(e.target.value)},
-            h("option",{value:"TODOS"},"Todos"),INGENIEROS.map(i=>h("option",{key:i},i)))),
-        h("div",null,h("div",{style:S.filtLbl},"Proyecto"),
-          h("select",{style:S.inpSm,value:fcom,onChange:e=>setFcom(e.target.value)},
-            h("option",{value:"TODOS"},"Todos"),
-            comisiones.map(c=>h("option",{key:c.id,value:String(c.id)},c.cli+" CC"+c.cc)))),
-        h("div",null,h("div",{style:S.filtLbl},"Concepto"),
-          h("select",{style:S.inpSm,value:fc,onChange:e=>setFc(e.target.value)},
-            h("option",{value:"TODOS"},"Todos"),CONCEPTOS.map(c=>h("option",{key:c},c)))),
-        h("div",null,h("div",{style:S.filtLbl},"Desde"),
-          h("input",{style:S.inpSm,type:"date",value:fd,onChange:e=>setFd(e.target.value)})),
-        h("div",null,h("div",{style:S.filtLbl},"Hasta"),
-          h("input",{style:S.inpSm,type:"date",value:fh,onChange:e=>setFh(e.target.value)})),
-        (fd||fh)&&h("button",{style:{...S.btnSmGray,alignSelf:"flex-end"},onClick:()=>{setFd("");setFh("");}}," Limpiar"),
-        h("button",{style:{...S.btnSm,marginLeft:"auto",alignSelf:"flex-end"},onClick:()=>setModal(true)}," Exportar Excel")),
-      (fd||fh)&&h("div",{style:S.filtBadge}," ",fd||"Inicio"," \u2192 ",fh||"Hoy"," \u00B7 ",h("strong",null,filt.length)," gastos"),
-      filt.length===0?h("div",{style:S.empty},"No hay gastos registrados a\u00FAn.")
-        :h(Tabla,{gastos:filt,comisiones,onDel:onDelG,showIng:true}),
-      h("div",{style:S.resumen},filt.length," gastos \u00B7 Total: ",h("strong",null,fmt(totF))," \u00B7 Efectivo: ",h("strong",null,fmt(totEf))," \u00B7 Tarjeta: ",h("strong",null,fmt(totTj)))),
-
-    modal&&h("div",{style:S.modalBg},
-      h("div",{style:S.modal},
-        h("div",{style:S.modalTitle},"Exportar Excel FO-AF-002"),
-        h("p",{style:{color:"#6B7280",fontSize:13,margin:"0 0 16px"}},
-          "Se exportar\u00E1n ",h("strong",null,filt.length)," gastos. El archivo tendr\u00E1 una hoja por proyecto/comisi\u00F3n.",
-          ant?" Anticipo: "+fmt(ant)+".":""),
-        h("div",{style:{display:"flex",gap:10}},
-          h("button",{style:{...S.btnOrange,marginTop:0,flex:1},
-            onClick:()=>{
-              const ings=[...new Set(filt.map(g=>g.ing))];
-              ings.forEach(ing=>{
-                const gc=filt.filter(g=>g.ing===ing);
-                const cc=comisiones.filter(c=>gc.some(g=>Number(g.com_id)===c.id||g.com_id===String(c.id)));
-                exportarExcel(gc,cc,ing,anticipos);
+    h(Card,{title:"Control de Anticipo por Ingeniero"},
+      h("div",{style:{overflowX:"auto"}},
+        h("table",{style:{...S.table,marginBottom:0}},
+          h("thead",null,h("tr",null,
+            h("th",{style:S.th},"Ingeniero"),
+            h("th",{style:S.th},"Proyecto"),
+            h("th",{style:{...S.thR}},"Anticipo Girado"),
+            h("th",{style:{...S.thR}},"Total Gastado"),
+            h("th",{style:{...S.thR}},"Reembolso (Sobro)"),
+            h("th",{style:{...S.thR}},"Saldo a Favor ESPINCONTROL"))),
+          h("tbody",null,
+            INGENIEROS.map(function(ing){
+              // Por proyecto
+              const rows=[];
+              comisiones.forEach(function(com){
+                const gastosC=gastos.filter(function(g){return g.ing===ing&&Number(g.com_id)===Number(com.id);});
+                const antC=(anticipos||[]).filter(function(a){return a.ing===ing&&Number(a.com_id)===Number(com.id);});
+                if(!gastosC.length&&!antC.length)return;
+                const gastado=gastosC.reduce(function(s,g){return s+num(g.tc);},0);
+                const anticipo=antC.reduce(function(s,a){return s+num(a.valor);},0);
+                const remb=anticipo>gastado?anticipo-gastado:0;
+                const saldo=gastado>anticipo?gastado-anticipo:0;
+                rows.push(h("tr",{key:ing+com.id,style:S.tr},
+                  h("td",{style:S.td},h("strong",null,ing.split(" ")[0])),
+                  h("td",{style:S.td},h("span",{style:S.badge},com.cli+" CC"+com.cc)),
+                  h("td",{style:S.tdR},anticipo>0?fmt(anticipo):h("span",{style:{color:"#9CA3AF"}},"Sin anticipo")),
+                  h("td",{style:S.tdR},fmt(gastado)),
+                  h("td",{style:{...S.tdR,color:remb>0?"#065F46":"#9CA3AF",fontWeight:remb>0?700:400}},remb>0?fmt(remb):"$0"),
+                  h("td",{style:{...S.tdR,color:saldo>0?"#DC2626":"#065F46",fontWeight:700}},saldo>0?fmt(saldo):"$0")));
               });
-              setModal(false);
-            }}," Confirmar y Descargar"),
-          h("button",{style:{...S.btnOrange,marginTop:0,flex:1,background:"#F1F5F9",color:"#374151"},onClick:()=>setModal(false)},"Cancelar")))));
-}
-
-//  Tabla 
-function Tabla({gastos,comisiones,onDel,onEdit,showIng}){
-  const comLabel=(g)=>{
-    if(g.com_cli) return g.com_cli+(g.com_cc?" CC"+g.com_cc:"");
-    const com=comisiones.find(x=>x.id===g.com_id||x.id===Number(g.com_id));
-    return com?(com.cli+" CC"+com.cc):"";
-  };
-  return h("div",{style:{overflowX:"auto"}},
-    h("table",{style:S.table},
-      h("thead",null,h("tr",null,
-        showIng&&h("th",{style:S.th},"Ingeniero"),
-        h("th",{style:S.th},"Proyecto"),
-        h("th",{style:S.th},"Fecha"),h("th",{style:S.th},"Establecimiento"),
-        h("th",{style:S.th},"NIT"),h("th",{style:S.th},"Concepto"),
-        h("th",{style:S.thR},"Subtotal"),h("th",{style:S.thR},"IVA"),h("th",{style:S.thR},"Total"),
-        h("th",{style:S.th},"Pago"),h("th",{style:S.th},""))),
-      h("tbody",null,gastos.map(g=>
-        h("tr",{key:g.id,style:S.tr},
-          showIng&&h("td",{style:S.td},h("strong",null,g.ing?.split(" ")[0])),
-          h("td",{style:S.td},h("span",{style:S.badgeGreen},comLabel(g)||"\u2014")),
-          h("td",{style:S.td},g.fp),
-          h("td",{style:S.td},g.est),
-          h("td",{style:S.td},g.nit),
-          h("td",{style:S.td},h("span",{style:S.badge},g.con)),
-          h("td",{style:S.tdR},fmt(g.sub)),
-          h("td",{style:S.tdR},fmt(g.iva)),
-          h("td",{style:{...S.tdR,fontWeight:700,color:"#0F4C81"}},fmt(g.tc)),
-          h("td",{style:S.td},h("span",{style:g.mp==="TARJETA"?S.tagTj:S.tagEf},g.mp)),
-          h("td",{style:S.td},h("div",{style:{display:"flex",gap:4}},
-            g.foto_url&&h("a",{href:g.foto_url,target:"_blank",style:{...S.btnDel,background:"#D1FAE5",color:"#065F46",textDecoration:"none",padding:"3px 8px"}},""),
-            onEdit&&h("button",{style:{...S.btnDel,background:"#EFF6FF",color:"#1D4ED8"},onClick:()=>onEdit(g)},""),
-            onDel&&h("button",{style:S.btnDel,onClick:()=>onDel(g.id)},""))))))));
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(h(App,null));
-</script>
-</body>
-</html>
+              // Sin proyecto
+              const gastosGen=gastos.filter(function(g){return g.ing===ing&&!g.com_id;});
+              const antGen=(anticipos||[]).filter(function(a){return a.ing===ing&&!a.com_id;});
+              if(gastosGen.length||antGen.length){
+                const gastado=gastosGen.reduce(function(s,g){return s+num(g.tc);},0);
+                const anticipo=antGen.reduce(function(s,a){return s+num(a.valor);},0);
+                const remb=anticipo>gastado?anticipo-gastado:0;
+                const saldo=gastado>anticipo?gastado-anticipo:0;
+                rows.push(h("tr",{key:ing+"gen",style:S.tr},
+                  h("td",{style:S.td},h("strong",null,ing.split(" ")[0])),
+                  h("td",{style:S.td},h("span",{style:{...S.badge,background:"#F1F5F9",color:"#6B7280"}},"Sin proyecto")),
+                  h("td",{style:S.tdR},anticipo>0?fmt(anticipo):h("span",{style:{color:"#9CA3AF"}},"Sin anticipo")),
+                  h("td",{style:S.tdR},fmt(gastado)),
+                  h("td",{style:{...S.tdR,color:remb>0?"#065F46":"#9CA3AF",fontWeight:remb>0?700:400}},remb>0?fmt(remb):"$0"),
+                  h("td",{style:{...S.tdR,color:saldo>0?"#DC2626":"#065F46",fontWeight:700}},saldo>0?fmt(saldo):"$0")));
+              }
+              return rows;
+            }))))),
