@@ -666,10 +666,12 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
           h("select",{style:{...S.inp,borderColor:!f.numLeg?"#F59E0B":"#E2E8F0"},value:f.numLeg,onChange:e=>set("numLeg",e.target.value)},
             h("option",{value:""},"\u2014 Selecciona \u2014"),
             (function(){
-              const legs=(anticipos||[]).filter(function(a){return Number(a.com_id)===Number(f.comId)&&a.ing===f.ing;});
-              const nums=[...new Set(legs.map(function(a){return a.num_legalizacion||1;}))].sort(function(a,b){return a-b;});
-              return nums.length>0?nums.map(function(n){return h("option",{key:n,value:n},"Legalizacion #"+n);}):
-                [h("option",{key:1,value:1},"Legalizacion #1")];
+              const legsAll=(anticipos||[]).filter(function(a){return Number(a.com_id)===Number(f.comId);});
+              const legsIng=legsAll.filter(function(a){return a.ing===f.ing;});
+              const src=legsIng.length>0?legsIng:legsAll;
+              const nums=[...new Set(src.map(function(a){return Number(a.num_legalizacion)||1;}))].sort(function(a,b){return a-b;});
+              if(nums.length===0)nums.push(1);
+              return nums.map(function(n){return h("option",{key:n,value:n},"Legalizacion #"+n);});
             })())),
         h(F,{label:"Fecha de Pago"},
           h("input",{style:S.inp,type:"date",value:f.fp,onChange:e=>set("fp",e.target.value)})),
@@ -851,7 +853,7 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
               h("div",null,
                 h("span",{style:{fontWeight:700,color:"#0F4C81",marginRight:8}},a.ing.split(" ")[0]),
                 com&&h("span",{style:{fontSize:12,color:"#6B7280",marginRight:8}},com.cli+" CC"+com.cc),
-                a.num_legalizacion&&h("span",{style:{background:"#7C3AED",color:"#fff",borderRadius:6,padding:"1px 7px",fontSize:11,fontWeight:700,marginRight:8}},"Leg. #"+a.num_legalizacion),
+                h("span",{style:{background:"#7C3AED",color:"#fff",borderRadius:6,padding:"1px 7px",fontSize:11,fontWeight:700,marginRight:8}},"Leg. #"+(a.num_legalizacion||1)),
                 h("span",{style:{fontWeight:700,color:"#065F46"}},fmt(a.valor)),
                 a.nota&&h("span",{style:{color:"#9CA3AF",fontSize:12,marginLeft:8}}," - "+a.nota),
                 h("span",{style:{color:"#9CA3AF",fontSize:12,marginLeft:8}},a.fecha)),
