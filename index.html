@@ -785,8 +785,8 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
 
   const registrarAnticipo=async()=>{
     if(!newAnt.valor||!newAnt.ing)return;
-    await onAddA({ing:newAnt.ing,comId:Number(newAnt.comId)||null,valor:num(newAnt.valor),nota:newAnt.nota,fecha:today()});
-    setNewAnt({ing:INGENIEROS[0],comId:"",valor:"",nota:""});
+    await onAddA({ing:newAnt.ing,comId:Number(newAnt.comId)||null,valor:num(newAnt.valor),nota:newAnt.nota,fecha:newAnt.fecha||today(),numLeg:Number(newAnt.numLeg)||1});
+    setNewAnt({ing:INGENIEROS[0],comId:"",valor:"",nota:"",fecha:today(),numLeg:1});
   };
   const comisionesIng=comisiones;
 
