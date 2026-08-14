@@ -844,165 +844,25 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
           h("input",{style:S.inp,value:newAnt.nota,
             onChange:function(e){setNewAnt(function(p){return{...p,nota:e.target.value};});},placeholder:"Ej: Anticipo inicial"}))),
       h("button",{style:{...S.btnSm,background:"#FF6B35",color:"#fff",padding:"10px 24px"},onClick:registrarAnticipo},"+ Registrar Anticipo"),
-      anticiposA.length>0&&h("div",{style:{marginTop:14}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}},"Anticipos registrados"),
-        h("div",{style:{display:"flex",flexDirection:"column",gap:6}},
-          anticiposA.map(function(a){
-            const com=comisiones.find(function(x){return x.id===a.com_id;});
-            return h("div",{key:a.id,style:{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#F8FAFC",borderRadius:8,padding:"8px 12px",border:"1px solid #E2E8F0"}},
-              h("div",null,
-                h("span",{style:{fontWeight:700,color:"#0F4C81",marginRight:8}},a.ing.split(" ")[0]),
-                com&&h("span",{style:{fontSize:12,color:"#6B7280",marginRight:8}},com.cli+" CC"+com.cc),
-                h("span",{style:{background:"#7C3AED",color:"#fff",borderRadius:6,padding:"1px 7px",fontSize:11,fontWeight:700,marginRight:8}},"Leg. #"+(a.num_legalizacion||1)),
-                h("span",{style:{fontWeight:700,color:"#065F46"}},fmt(a.valor)),
-                a.nota&&h("span",{style:{color:"#9CA3AF",fontSize:12,marginLeft:8}}," - "+a.nota),
-                h("span",{style:{color:"#9CA3AF",fontSize:12,marginLeft:8}},a.fecha)),
-              h("button",{style:S.btnDel,onClick:function(){onDelA(a.id);}},"✕"));
-          })))),
-    h("div",{style:S.kpiRow},
-      h(Kpi,{label:"Total Gastos",value:fmt(totF),icon:"",color:"#0F4C81"}),
-      h(Kpi,{label:"Efectivo / Contado",value:fmt(totEf),icon:"",color:"#047857"}),
-      h(Kpi,{label:"Tarjeta Corporativa",value:fmt(totTj),icon:"",color:"#7C3AED"}),
-      h(Kpi,{label:"Total IVA",value:fmt(totIVA),icon:"",color:"#B45309"})),
-
-    h(Card,{title:"Control de Anticipo por Ingeniero"},
-      h("div",{style:{overflowX:"auto"}},
-        h("table",{style:{...S.table,marginBottom:0}},
+      anticiposA.length>0&&h("div",{style:{marginTop:16,overflowX:"auto"}},
+        h("table",{style:{...S.table,fontSize:13}},
           h("thead",null,h("tr",null,
             h("th",{style:S.th},"Ingeniero"),
             h("th",{style:S.th},"Proyecto"),
-            h("th",{style:{...S.thR}},"Anticipo Girado"),
-            h("th",{style:{...S.thR}},"Total Gastado"),
-            h("th",{style:{...S.thR}},"Saldo a Favor Empleado"),
-            h("th",{style:{...S.thR}},"Saldo a Favor ESPINCONTROL"))),
+            h("th",{style:{...S.th,textAlign:"center"}},"N° Legalización"),
+            h("th",{style:{...S.th,textAlign:"right"}},"Valor"),
+            h("th",{style:S.th},"Fecha"),
+            h("th",{style:S.th},"Observaciones"),
+            h("th",{style:S.th},""))),
           h("tbody",null,
-            INGENIEROS.map(function(ing){
-              // Por proyecto
-              const rows=[];
-              comisiones.forEach(function(com){
-                const gastosC=gastos.filter(function(g){return g.ing===ing&&Number(g.com_id)===Number(com.id);});
-                const antC=(anticipos||[]).filter(function(a){return a.ing===ing&&Number(a.com_id)===Number(com.id);});
-                if(!gastosC.length&&!antC.length)return;
-                const gastado=gastosC.reduce(function(s,g){return s+num(g.tc);},0);
-                const anticipo=antC.reduce(function(s,a){return s+num(a.valor);},0);
-                // Sin anticipo: empleado puso de su bolsillo -> favor empleado
-                // Anticipo > gastado: sobro -> favor ESPINCONTROL (debe devolver)
-                // Gastado > anticipo: gasto mas -> favor empleado (empresa le debe)
-                // Igual: cero en ambos
-                const diff=gastado-anticipo;
-                const favEmpleado=anticipo===0?gastado:diff>0?diff:0;
-                const favEspincontrol=anticipo>0&&diff<0?Math.abs(diff):0;
-                rows.push(h("tr",{key:ing+com.id,style:S.tr},
-                  h("td",{style:S.td},h("strong",null,ing.split(" ")[0])),
-                  h("td",{style:S.td},h("span",{style:S.badge},com.cli+" CC"+com.cc)),
-                  h("td",{style:S.tdR},anticipo>0?fmt(anticipo):h("span",{style:{color:"#9CA3AF"}},"Sin anticipo")),
-                  h("td",{style:S.tdR},gastado>0?fmt(gastado):"$0"),
-                  h("td",{style:{...S.tdR,color:favEmpleado>0?"#065F46":"#374151",fontWeight:favEmpleado>0?700:400}},fmt(favEmpleado)),
-                  h("td",{style:{...S.tdR,color:favEspincontrol>0?"#065F46":"#374151",fontWeight:favEspincontrol>0?700:400}},fmt(favEspincontrol))));
-              });
-              // Sin proyecto
-              const gastosGen=gastos.filter(function(g){return g.ing===ing&&!g.com_id;});
-              const antGen=(anticipos||[]).filter(function(a){return a.ing===ing&&!a.com_id;});
-              if(gastosGen.length||antGen.length){
-                const gastado=gastosGen.reduce(function(s,g){return s+num(g.tc);},0);
-                const anticipo=antGen.reduce(function(s,a){return s+num(a.valor);},0);
-                const diff2=gastado-anticipo;
-                const favEmpleado2=anticipo===0?gastado:diff2>0?diff2:0;
-                const favEspincontrol2=anticipo>0&&diff2<0?Math.abs(diff2):0;
-                rows.push(h("tr",{key:ing+"gen",style:S.tr},
-                  h("td",{style:S.td},h("strong",null,ing.split(" ")[0])),
-                  h("td",{style:S.td},h("span",{style:{...S.badge,background:"#F1F5F9",color:"#6B7280"}},"Sin proyecto")),
-                  h("td",{style:S.tdR},anticipo>0?fmt(anticipo):h("span",{style:{color:"#9CA3AF"}},"Sin anticipo")),
-                  h("td",{style:S.tdR},gastado>0?fmt(gastado):"$0"),
-                  h("td",{style:{...S.tdR,color:favEmpleado2>0?"#065F46":"#374151",fontWeight:favEmpleado2>0?700:400}},fmt(favEmpleado2)),
-                  h("td",{style:{...S.tdR,color:favEspincontrol2>0?"#065F46":"#374151",fontWeight:favEspincontrol2>0?700:400}},fmt(favEspincontrol2))));
-              }
-              return rows;
-            }))))),
-h("div",{style:S.kpiRow},
-      porIng.map(i=>h("div",{key:i.n,style:S.ingCard},
-        h("div",{style:{fontWeight:800,color:"#0F4C81",fontSize:14}},i.n),
-        h("div",{style:{fontWeight:900,fontSize:17,color:"#1E293B",marginTop:4}},fmt(i.t)),
-        h("div",{style:{fontSize:12,color:"#9CA3AF",marginTop:2}},i.c+" gastos")))),
-
-    h(Card,{title:"Registro de Gastos"},
-      h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12,alignItems:"flex-end"}},
-        h("div",null,h("div",{style:S.filtLbl},"Ingeniero"),
-          h("select",{style:S.inpSm,value:fi,onChange:e=>setFi(e.target.value)},
-            h("option",{value:"TODOS"},"Todos"),INGENIEROS.map(i=>h("option",{key:i},i)))),
-        h("div",null,h("div",{style:S.filtLbl},"Proyecto"),
-          h("select",{style:S.inpSm,value:fcom,onChange:e=>setFcom(e.target.value)},
-            h("option",{value:"TODOS"},"Todos"),
-            comisiones.map(c=>h("option",{key:c.id,value:String(c.id)},c.cli+" CC"+c.cc)))),
-        h("div",null,h("div",{style:S.filtLbl},"Concepto"),
-          h("select",{style:S.inpSm,value:fc,onChange:e=>setFc(e.target.value)},
-            h("option",{value:"TODOS"},"Todos"),CONCEPTOS.map(c=>h("option",{key:c},c)))),
-        h("div",null,h("div",{style:S.filtLbl},"Desde"),
-          h("input",{style:S.inpSm,type:"date",value:fd,onChange:e=>setFd(e.target.value)})),
-        h("div",null,h("div",{style:S.filtLbl},"Hasta"),
-          h("input",{style:S.inpSm,type:"date",value:fh,onChange:e=>setFh(e.target.value)})),
-        (fd||fh)&&h("button",{style:{...S.btnSmGray,alignSelf:"flex-end"},onClick:()=>{setFd("");setFh("");}}," Limpiar"),
-        h("button",{style:{...S.btnSm,marginLeft:"auto",alignSelf:"flex-end"},onClick:()=>setModal(true)}," Exportar Excel")),
-      (fd||fh)&&h("div",{style:S.filtBadge}," ",fd||"Inicio"," \u2192 ",fh||"Hoy"," \u00B7 ",h("strong",null,filt.length)," gastos"),
-      filt.length===0?h("div",{style:S.empty},"No hay gastos registrados a\u00FAn.")
-        :h(Tabla,{gastos:filt,comisiones,onDel:onDelG,showIng:true}),
-      h("div",{style:S.resumen},filt.length," gastos \u00B7 Total: ",h("strong",null,fmt(totF))," \u00B7 Efectivo: ",h("strong",null,fmt(totEf))," \u00B7 Tarjeta: ",h("strong",null,fmt(totTj)))),
-
-    modal&&h("div",{style:S.modalBg},
-      h("div",{style:S.modal},
-        h("div",{style:S.modalTitle},"Exportar Excel FO-AF-002"),
-        h("p",{style:{color:"#6B7280",fontSize:13,margin:"0 0 16px"}},
-          "Se exportar\u00E1n ",h("strong",null,filt.length)," gastos. El archivo tendr\u00E1 una hoja por proyecto/comisi\u00F3n.",
-          ant?" Anticipo: "+fmt(ant)+".":""),
-        h("div",{style:{display:"flex",gap:10}},
-          h("button",{style:{...S.btnOrange,marginTop:0,flex:1},
-            onClick:()=>{
-              const ings=[...new Set(filt.map(g=>g.ing))];
-              ings.forEach(ing=>{
-                const gc=filt.filter(g=>g.ing===ing);
-                const cc=comisiones.filter(c=>gc.some(g=>Number(g.com_id)===c.id||g.com_id===String(c.id)));
-                exportarExcel(gc,cc,ing,anticipos);
-              });
-              setModal(false);
-            }}," Confirmar y Descargar"),
-          h("button",{style:{...S.btnOrange,marginTop:0,flex:1,background:"#F1F5F9",color:"#374151"},onClick:()=>setModal(false)},"Cancelar")))));
-}
-
-//  Tabla 
-function Tabla({gastos,comisiones,onDel,onEdit,showIng}){
-  const comLabel=(g)=>{
-    if(g.com_cli) return g.com_cli+(g.com_cc?" CC"+g.com_cc:"");
-    const com=comisiones.find(x=>x.id===g.com_id||x.id===Number(g.com_id));
-    return com?(com.cli+" CC"+com.cc):"";
-  };
-  return h("div",{style:{overflowX:"auto"}},
-    h("table",{style:S.table},
-      h("thead",null,h("tr",null,
-        showIng&&h("th",{style:S.th},"Ingeniero"),
-        h("th",{style:S.th},"Proyecto"),
-        h("th",{style:S.th},"Fecha"),h("th",{style:S.th},"Establecimiento"),
-        h("th",{style:S.th},"NIT"),h("th",{style:S.th},"Concepto"),
-        h("th",{style:S.thR},"Subtotal"),h("th",{style:S.thR},"IVA"),h("th",{style:S.thR},"Total"),
-        h("th",{style:S.th},"Pago"),h("th",{style:S.th},""))),
-      h("tbody",null,gastos.map(g=>
-        h("tr",{key:g.id,style:S.tr},
-          showIng&&h("td",{style:S.td},h("strong",null,g.ing?.split(" ")[0])),
-          h("td",{style:S.td},h("span",{style:S.badgeGreen},comLabel(g)||"\u2014")),
-          h("td",{style:S.td},g.fp),
-          h("td",{style:S.td},g.est),
-          h("td",{style:S.td},g.nit),
-          h("td",{style:S.td},h("span",{style:S.badge},g.con)),
-          h("td",{style:S.tdR},fmt(g.sub)),
-          h("td",{style:S.tdR},fmt(g.iva)),
-          h("td",{style:{...S.tdR,fontWeight:700,color:"#0F4C81"}},fmt(g.tc)),
-          h("td",{style:S.td},h("span",{style:g.mp==="TARJETA"?S.tagTj:S.tagEf},g.mp)),
-          h("td",{style:S.td},h("div",{style:{display:"flex",gap:4}},
-            g.foto_url&&h("a",{href:g.foto_url,target:"_blank",style:{...S.btnDel,background:"#D1FAE5",color:"#065F46",textDecoration:"none",padding:"3px 8px"}},""),
-            onEdit&&h("button",{style:{...S.btnDel,background:"#EFF6FF",color:"#1D4ED8"},onClick:()=>onEdit(g)},""),
-            onDel&&h("button",{style:S.btnDel,onClick:()=>onDel(g.id)},""))))))));
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(h(App,null));
-</script>
-</body>
-</html>
+            anticiposA.map(function(a){
+              const com=comisiones.find(function(x){return x.id===a.com_id;});
+              return h("tr",{key:a.id,style:S.tr},
+                h("td",{style:S.td},h("strong",null,a.ing.split(" ")[0])),
+                h("td",{style:S.td},com?h("span",{style:S.badge},com.cli+" CC"+com.cc):h("span",{style:{color:"#9CA3AF",fontSize:12}},"Sin proyecto")),
+                h("td",{style:{...S.td,textAlign:"center"}},h("span",{style:{background:"#7C3AED",color:"#fff",borderRadius:6,padding:"2px 10px",fontSize:12,fontWeight:700}},"#"+(a.num_legalizacion||1))),
+                h("td",{style:{...S.tdR,fontWeight:700,color:"#065F46"}},fmt(a.valor)),
+                h("td",{style:S.td},a.fecha||"-"),
+                h("td",{style:{...S.td,color:"#6B7280",fontSize:12}},a.nota||"-"),
+                h("td",{style:S.td},h("button",{style:S.btnDel,onClick:function(){onDelA(a.id);}},"✕")));
+            })))),
