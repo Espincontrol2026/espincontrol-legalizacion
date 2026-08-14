@@ -20,7 +20,7 @@
 <body>
 <div id="root"></div>
 <script>
-const CONCEPTOS=["ALIMENTACI\u00D3N","HOSPEDAJE","COMBUSTIBLE","PEAJES / TRANSPORTE","ALQUILER DE VEH\u00CDCULO","MATERIAL","OTROS"];
+const CONCEPTOS=["ALIMENTACI\u00D3N","HOSPEDAJE","COMBUSTIBLE","PEAJES / TRANSPORTE","DOTACI\u00D3N / HSE","PAPELER\u00CDA","MATERIAL"];
 const INGENIEROS=["Felipe Rodriguez","Leidy Camacho","Luis Salinas","Nelson Chaparro"];
 const SUPA_URL="https://wottrelakdopxzpcfaos.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvdHRyZWxha2RvcHh6cGNmYW9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3NTY4MzYsImV4cCI6MjEwMDMzMjgzNn0.bMqMkniuTmR7JyYYM_Cd6hwD_aX_BLdZDhHSPN7p9HM";
@@ -45,7 +45,7 @@ const addGasto=async(g)=>{await sb.from("gastos").insert([{
   ing:g.ing,com_id:g.comId||null,com_cli:g.comCli||null,com_cc:g.comCc||null,
   est:g.est,nit:g.nit,fac:g.fac,con:g.con,
   sub:Number(g.sub)||0,iva:Number(g.iva)||0,tc:Number(g.tc)||0,
-  fp:g.fp,mp:g.mp,foto_url:g.fotoUrl||null
+  fp:g.fp,mp:g.mp,foto_url:g.fotoUrl||null,num_legalizacion:g.numLeg?Number(g.numLeg):null
 }]);};
 const delGasto=async(id)=>{await sb.from("gastos").delete().eq("id",id);};
 const editGasto=async(g)=>{await sb.from("gastos").update({
@@ -91,7 +91,7 @@ const delComision=async(id,comisiones,gastos)=>{
 };
 
 const loadA=async()=>{const{data}=await sb.from("anticipos").select("*").order("fecha",{ascending:true});return data||[];};
-const addAnticipo=async(a)=>{await sb.from("anticipos").insert([{ing:a.ing,com_id:a.comId||null,valor:Number(a.valor),nota:a.nota||"",fecha:a.fecha}]);};
+const addAnticipo=async(a)=>{await sb.from("anticipos").insert([{ing:a.ing,com_id:a.comId||null,valor:Number(a.valor),nota:a.nota||"",fecha:a.fecha,num_legalizacion:Number(a.numLeg)||1}]);};
 const delAnticipo=async(id)=>{await sb.from("anticipos").delete().eq("id",id);};
 const fmt=(v)=>Number(v||0).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
 const num=(v)=>parseFloat(v)||0;
@@ -506,7 +506,7 @@ function App(){
 
 
 function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perfil}){
-  const EG={ing:INGENIEROS[0],comId:"",est:"",nit:"",fac:"",con:CONCEPTOS[0],sub:"",iva:"",fp:today(),mp:"EFECTIVO"};
+  const EG={ing:INGENIEROS[0],comId:"",numLeg:"",est:"",nit:"",fac:"",con:CONCEPTOS[0],sub:"",iva:"",fp:today(),mp:"EFECTIVO"};
   const [f,setF]=useState(EG);
   const [editId,setEditId]=useState(null);
   const [filtProy,setFiltProy]=useState("TODOS");
@@ -558,7 +558,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
     if(fotoData&&!editId){
       fotoUrl=await subirFoto(fotoData.b64,fotoData.mt,carpeta,nombre);
     }
-    const gasto={...f,comId:f.comId,comCli:com?.cli||"",comCc:com?.cc||"",tc:tc(),fotoUrl};
+    const gasto={...f,comId:f.comId,comCli:com?.cli||"",comCc:com?.cc||"",tc:tc(),fotoUrl,numLeg:f.numLeg||null};
     if(editId){ await onEditG({...gasto,id:editId}); setEditId(null); }
     else { await onAddG({...gasto,timestamp:new Date().toISOString()}); }
     setF(p=>({...p,est:"",nit:"",fac:"",con:CONCEPTOS[0],sub:"",iva:"",fp:today()}));
@@ -659,9 +659,18 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
         h(F,{label:"Proyecto",wide:true},
           misComisiones.length===0
             ?h("div",{style:{...S.inp,background:"#FEF3C7",color:"#92400E",fontSize:13}},"Primero crea un proyecto activo")
-            :h("select",{style:{...S.inp,borderColor:!f.comId?"#F59E0B":"#E2E8F0"},value:f.comId,onChange:e=>set("comId",parseInt(e.target.value))},
+            :h("select",{style:{...S.inp,borderColor:!f.comId?"#F59E0B":"#E2E8F0"},value:f.comId,onChange:function(e){set("comId",parseInt(e.target.value));set("numLeg","");}},
                 h("option",{value:""},"\u2014 Selecciona el proyecto \u2014"),
                 misComisiones.map(c=>h("option",{key:c.id,value:c.id},c.cli+" - CC "+c.cc)))),
+        f.comId&&h(F,{label:"No. Legalizacion"},
+          h("select",{style:{...S.inp,borderColor:!f.numLeg?"#F59E0B":"#E2E8F0"},value:f.numLeg,onChange:e=>set("numLeg",e.target.value)},
+            h("option",{value:""},"\u2014 Selecciona \u2014"),
+            (function(){
+              const legs=(anticipos||[]).filter(function(a){return Number(a.com_id)===Number(f.comId)&&a.ing===f.ing;});
+              const nums=[...new Set(legs.map(function(a){return a.num_legalizacion||1;}))].sort(function(a,b){return a-b;});
+              return nums.length>0?nums.map(function(n){return h("option",{key:n,value:n},"Legalizacion #"+n);}):
+                [h("option",{key:1,value:1},"Legalizacion #1")];
+            })())),
         h(F,{label:"Fecha de Pago"},
           h("input",{style:S.inp,type:"date",value:f.fp,onChange:e=>set("fp",e.target.value)})),
         h(F,{label:"M\u00E9todo de Pago"},
@@ -735,7 +744,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
 //  Vista Contabilidad 
 function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAddC,onDelC}){
   const [fi,setFi]=useState("TODOS");
-  const [newAnt,setNewAnt]=useState({ing:INGENIEROS[0],comId:"",valor:"",nota:""});
+  const [newAnt,setNewAnt]=useState({ing:INGENIEROS[0],comId:"",valor:"",nota:"",fecha:today(),numLeg:1});
   const [newProy,setNewProy]=useState({ing:INGENIEROS[0],cli:"",cc:""});
   const [showNuevaProy,setShowNuevaProy]=useState(false);
   const [fc,setFc]=useState("TODOS");
@@ -820,6 +829,12 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
           h("select",{style:S.inp,value:newAnt.comId,onChange:function(e){setNewAnt(function(p){return{...p,comId:e.target.value};});}},
             h("option",{value:""},"-- Sin proyecto especifico --"),
             comisionesIng.map(function(com){return h("option",{key:com.id,value:com.id},com.cli+" CC"+com.cc);}))),
+        h("div",null,h("label",{style:S.lbl},"No. Legalizacion"),
+          h("input",{style:S.inp,type:"number",min:"1",value:newAnt.numLeg,
+            onChange:function(e){setNewAnt(function(p){return{...p,numLeg:e.target.value};});},placeholder:"1"})),
+        h("div",null,h("label",{style:S.lbl},"Fecha del Anticipo"),
+          h("input",{style:S.inp,type:"date",value:newAnt.fecha,
+            onChange:function(e){setNewAnt(function(p){return{...p,fecha:e.target.value};});}})),
         h("div",null,h("label",{style:S.lbl},"Valor (COP)"),
           h("input",{style:S.inp,type:"number",value:newAnt.valor,
             onChange:function(e){setNewAnt(function(p){return{...p,valor:e.target.value};});},placeholder:"Ej: 500000"})),
@@ -836,6 +851,7 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
               h("div",null,
                 h("span",{style:{fontWeight:700,color:"#0F4C81",marginRight:8}},a.ing.split(" ")[0]),
                 com&&h("span",{style:{fontSize:12,color:"#6B7280",marginRight:8}},com.cli+" CC"+com.cc),
+                a.num_legalizacion&&h("span",{style:{background:"#7C3AED",color:"#fff",borderRadius:6,padding:"1px 7px",fontSize:11,fontWeight:700,marginRight:8}},"Leg. #"+a.num_legalizacion),
                 h("span",{style:{fontWeight:700,color:"#065F46"}},fmt(a.valor)),
                 a.nota&&h("span",{style:{color:"#9CA3AF",fontSize:12,marginLeft:8}}," - "+a.nota),
                 h("span",{style:{color:"#9CA3AF",fontSize:12,marginLeft:8}},a.fecha)),
