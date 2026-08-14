@@ -785,8 +785,8 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
 
   const registrarAnticipo=async()=>{
     if(!newAnt.valor||!newAnt.ing)return;
-    await onAddA({ing:newAnt.ing,comId:Number(newAnt.comId)||null,valor:num(newAnt.valor),nota:newAnt.nota,fecha:today()});
-    setNewAnt({ing:INGENIEROS[0],comId:"",valor:"",nota:""});
+    await onAddA({ing:newAnt.ing,comId:Number(newAnt.comId)||null,valor:num(newAnt.valor),nota:newAnt.nota,fecha:newAnt.fecha||today(),numLeg:Number(newAnt.numLeg)||1});
+    setNewAnt({ing:INGENIEROS[0],comId:"",valor:"",nota:"",fecha:today(),numLeg:1});
   };
   const comisionesIng=comisiones;
 
@@ -864,11 +864,13 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
                 h("td",{style:{...S.tdR,fontWeight:700,color:"#065F46"}},fmt(a.valor)),
                 h("td",{style:S.td},a.fecha||"-"),
                 h("td",{style:{...S.td,color:"#6B7280",fontSize:12}},a.nota||"-"),
-                h("td",{style:S.td},h("button",{style:S.btnDel,onClick:function(){onDelA(a.id);}},"✕")))
-"})
-,{style:
-   h
-ead",null,h("tr",null,
+                h("td",{style:S.td},h("button",{style:S.btnDel,onClick:function(){onDelA(a.id);}},"✕")));
+            }))))
+
+h(Card,{title:"Control de Anticipo por Ingeniero"},
+      h("div",{style:{overflowX:"auto"}},
+        h("table",{style:{...S.table,marginBottom:0}},
+          h("thead",null,h("tr",null,
             h("th",{style:S.th},"Ingeniero"),
             h("th",{style:S.th},"Proyecto"),
             h("th",{style:{...S.thR}},"Anticipo Girado"),
@@ -965,7 +967,7 @@ h("div",{style:S.kpiRow},
               });
               setModal(false);
             }}," Confirmar y Descargar"),
-          h("button",{style:{...S.btnOrange,marginTop:0,flex:1,background:"#F1F5F9",color:"#374151"},onClick:()=>setModal(false)},"Cancelar")))));
+          h("button",{style:{...S.btnOrange,marginTop:0,flex:1,background:"#F1F5F9",color:"#374151"},onClick:()=>setModal(false)},"Cancelar"))))));
 }
 
 //  Tabla 
