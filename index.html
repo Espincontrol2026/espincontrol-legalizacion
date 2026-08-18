@@ -595,7 +595,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
     const antC=anticiposMios.filter(function(a){return Number(a.com_id)===Number(com.id);});
     // Agrupar por numero de legalizacion
     const numLegs=[...new Set(antC.map(function(a){return Number(a.num_legalizacion)||1;}))].sort(function(a,b){return a-b;});
-    const legalizaciones=numLegs.map(function(n){
+    var legalizaciones=numLegs.map(function(n){
       const antLeg=antC.filter(function(a){return (Number(a.num_legalizacion)||1)===n;});
       const gastosLeg=gastosC.filter(function(g){return (Number(g.num_legalizacion)||n)===n;});
       const anticipo=antLeg.reduce(function(s,a){return s+num(a.valor);},0);
@@ -606,6 +606,11 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
       const pct=anticipo>0?Math.min(100,Math.round((gastado/anticipo)*100)):0;
       return {n,anticipo,gastado,favEmpleado,favEspincontrol,pct,nGastos:gastosLeg.length};
     });
+    // Si no hay anticipos pero si hay gastos, mostrar resumen general
+    if(legalizaciones.length===0&&gastosC.length>0){
+      const gastado=gastosC.reduce(function(s,g){return s+num(g.tc);},0);
+      legalizaciones=[{n:null,anticipo:0,gastado,favEmpleado:gastado,favEspincontrol:0,pct:0,nGastos:gastosC.length}];
+    }
     const gastado=gastosC.reduce(function(s,g){return s+num(g.tc);},0);
     const anticipo=antC.reduce(function(s,a){return s+num(a.valor);},0);
     return {com,gastado,anticipo,legalizaciones,nGastos:gastosC.length};
@@ -728,7 +733,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
               b.legalizaciones.map(function(leg,li){
                 return h("div",{key:leg.n,style:{padding:"12px 16px",background:li%2===0?"#F8FAFC":"#fff",borderTop:li>0?"1px solid #E2E8F0":"none"}},
                   h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}},
-                    h("span",{style:{background:"#7C3AED",color:"#fff",borderRadius:6,padding:"2px 10px",fontSize:12,fontWeight:700}},"Leg. #"+leg.n),
+                    leg.n?h("span",{style:{background:"#7C3AED",color:"#fff",borderRadius:6,padding:"2px 10px",fontSize:12,fontWeight:700}},"Leg. #"+leg.n):h("span",{style:{background:"#6B7280",color:"#fff",borderRadius:6,padding:"2px 10px",fontSize:12,fontWeight:700}},"Sin anticipo"),
                     h("span",{style:{fontSize:12,color:"#6B7280"}},leg.nGastos+" gastos registrados")),
                   h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:8}},
                     h("div",{style:{background:"#EFF6FF",borderRadius:8,padding:"8px 12px",borderLeft:"3px solid #0F4C81"}},
