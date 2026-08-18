@@ -510,6 +510,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
   const [f,setF]=useState(EG);
   const [editId,setEditId]=useState(null);
   const [filtProy,setFiltProy]=useState("TODOS");
+  const [filtLeg,setFiltLeg]=useState("TODOS");
   const [ocrs,setOcrs]=useState("idle");
   const [prev,setPrev]=useState(null);
   const [fotoData,setFotoData]=useState(null);
@@ -587,16 +588,27 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
   const saldo=totalAnticipo-total;
   const pct=totalAnticipo>0?Math.min(100,Math.round((total/totalAnticipo)*100)):0;
 
-  // Balance de anticipos por proyecto
+  // Balance de anticipos por proyecto y por legalizacion
   const anticiposMios=(anticipos||[]).filter(function(a){return a.ing===f.ing;});
   const balancePorProyecto=misComisiones.map(function(com){
     const gastosC=gastosIng.filter(function(g){return Number(g.com_id)===Number(com.id);});
     const antC=anticiposMios.filter(function(a){return Number(a.com_id)===Number(com.id);});
+    // Agrupar por numero de legalizacion
+    const numLegs=[...new Set(antC.map(function(a){return Number(a.num_legalizacion)||1;}))].sort(function(a,b){return a-b;});
+    const legalizaciones=numLegs.map(function(n){
+      const antLeg=antC.filter(function(a){return (Number(a.num_legalizacion)||1)===n;});
+      const gastosLeg=gastosC.filter(function(g){return (Number(g.num_legalizacion)||n)===n;});
+      const anticipo=antLeg.reduce(function(s,a){return s+num(a.valor);},0);
+      const gastado=gastosLeg.reduce(function(s,g){return s+num(g.tc);},0);
+      const diff=gastado-anticipo;
+      const favEmpleado=anticipo===0?gastado:diff>0?diff:0;
+      const favEspincontrol=anticipo>0&&diff<0?Math.abs(diff):0;
+      const pct=anticipo>0?Math.min(100,Math.round((gastado/anticipo)*100)):0;
+      return {n,anticipo,gastado,favEmpleado,favEspincontrol,pct,nGastos:gastosLeg.length};
+    });
     const gastado=gastosC.reduce(function(s,g){return s+num(g.tc);},0);
     const anticipo=antC.reduce(function(s,a){return s+num(a.valor);},0);
-    const saldoC=anticipo-gastado;
-    const pctC=anticipo>0?Math.min(100,Math.round((gastado/anticipo)*100)):0;
-    return {com,gastado,anticipo,saldo:saldoC,pct:pctC,nGastos:gastosC.length,nAnticipos:antC.length};
+    return {com,gastado,anticipo,legalizaciones,nGastos:gastosC.length};
   }).filter(function(b){return b.anticipo>0||b.gastado>0;});
   // Anticipos sin proyecto especifico
   const antSinProy=anticiposMios.filter(function(a){return !a.com_id;});
@@ -703,42 +715,59 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
 
     // Tabla de gastos por ingeniero
     balancePorProyecto.length>0&&h(Card,{title:"Balance por Proyecto"},
-      h("div",{style:{display:"flex",flexDirection:"column",gap:14}},
+      h("div",{style:{display:"flex",flexDirection:"column",gap:16}},
         balancePorProyecto.map(function(b){
-          return h("div",{key:b.com.id,style:{background:"#F8FAFC",borderRadius:12,padding:"14px 16px",border:"1px solid #E2E8F0"}},
-            h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:10}},
-              h("span",{style:{fontWeight:800,color:"#0F4C81",fontSize:14}},b.com.cli),
-              h("span",{style:{background:"#0F4C81",color:"#fff",padding:"2px 8px",borderRadius:6,fontSize:11,fontWeight:700}},"CC "+b.com.cc),
-              h("span",{style:{fontSize:12,color:"#9CA3AF",marginLeft:"auto"}},b.nGastos+" gastos")),
-            h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}},
-              h("div",{style:{background:"#EFF6FF",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid #0F4C81"}},
-                h("div",{style:{fontSize:10,fontWeight:600,color:"#6B7280",textTransform:"uppercase",marginBottom:3}},"Anticipo"),
-                h("div",{style:{fontWeight:900,fontSize:15,color:"#0F4C81"}},fmt(b.anticipo))),
-              h("div",{style:{background:"#FEF3C7",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid #F59E0B"}},
-                h("div",{style:{fontSize:10,fontWeight:600,color:"#6B7280",textTransform:"uppercase",marginBottom:3}},"Gastado"),
-                h("div",{style:{fontWeight:900,fontSize:15,color:"#B45309"}},fmt(b.gastado))),
-              h("div",{style:{background:b.saldo>=0?"#D1FAE5":"#FEE2E2",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid "+(b.saldo>=0?"#065F46":"#DC2626")}},
-                h("div",{style:{fontSize:10,fontWeight:600,color:"#6B7280",textTransform:"uppercase",marginBottom:3}},b.saldo>=0?"Disponible":"Excedido"),
-                h("div",{style:{fontWeight:900,fontSize:15,color:b.saldo>=0?"#065F46":"#DC2626"}},fmt(Math.abs(b.saldo))))),
-            h("div",null,
-              h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:11,color:"#6B7280",marginBottom:3}},
-                h("span",null,"Ejecucion del anticipo"),
-                h("span",null,b.pct+"%")),
-              h("div",{style:{background:"#E2E8F0",borderRadius:20,height:6,overflow:"hidden"}},
-                h("div",{style:{width:b.pct+"%",height:"100%",background:b.pct<80?"#0F4C81":b.pct<100?"#F59E0B":"#DC2626",borderRadius:20}}))));
+          return h("div",{key:b.com.id,style:{border:"1px solid #E2E8F0",borderRadius:12,overflow:"hidden"}},
+            // Header del proyecto
+            h("div",{style:{background:"#0F4C81",padding:"10px 16px",display:"flex",alignItems:"center",gap:8}},
+              h("span",{style:{fontWeight:800,color:"#fff",fontSize:14}},b.com.cli),
+              h("span",{style:{background:"rgba(255,255,255,.2)",color:"#fff",padding:"2px 8px",borderRadius:6,fontSize:11,fontWeight:700}},"CC "+b.com.cc),
+              h("span",{style:{color:"#93C5FD",fontSize:12,marginLeft:"auto"}},b.nGastos+" gastos")),
+            // Legalizaciones
+            h("div",{style:{display:"flex",flexDirection:"column",gap:0}},
+              b.legalizaciones.map(function(leg,li){
+                return h("div",{key:leg.n,style:{padding:"12px 16px",background:li%2===0?"#F8FAFC":"#fff",borderTop:li>0?"1px solid #E2E8F0":"none"}},
+                  h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}},
+                    h("span",{style:{background:"#7C3AED",color:"#fff",borderRadius:6,padding:"2px 10px",fontSize:12,fontWeight:700}},"Leg. #"+leg.n),
+                    h("span",{style:{fontSize:12,color:"#6B7280"}},leg.nGastos+" gastos registrados")),
+                  h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:8}},
+                    h("div",{style:{background:"#EFF6FF",borderRadius:8,padding:"8px 12px",borderLeft:"3px solid #0F4C81"}},
+                      h("div",{style:{fontSize:10,fontWeight:600,color:"#6B7280",textTransform:"uppercase",marginBottom:2}},"Anticipo"),
+                      h("div",{style:{fontWeight:900,fontSize:14,color:"#0F4C81"}},fmt(leg.anticipo))),
+                    h("div",{style:{background:"#FEF3C7",borderRadius:8,padding:"8px 12px",borderLeft:"3px solid #F59E0B"}},
+                      h("div",{style:{fontSize:10,fontWeight:600,color:"#6B7280",textTransform:"uppercase",marginBottom:2}},"Gastado"),
+                      h("div",{style:{fontWeight:900,fontSize:14,color:"#B45309"}},fmt(leg.gastado))),
+                    h("div",{style:{background:leg.favEmpleado>0?"#D1FAE5":leg.favEspincontrol>0?"#FEE2E2":"#F1F5F9",borderRadius:8,padding:"8px 12px",borderLeft:"3px solid "+(leg.favEmpleado>0?"#065F46":leg.favEspincontrol>0?"#DC2626":"#9CA3AF")}},
+                      h("div",{style:{fontSize:10,fontWeight:600,color:"#6B7280",textTransform:"uppercase",marginBottom:2}},leg.favEmpleado>0?"A Favor Empleado":leg.favEspincontrol>0?"A Favor ESPINCONTROL":"Balanceado"),
+                      h("div",{style:{fontWeight:900,fontSize:14,color:leg.favEmpleado>0?"#065F46":leg.favEspincontrol>0?"#DC2626":"#374151"}},leg.favEmpleado>0?fmt(leg.favEmpleado):leg.favEspincontrol>0?fmt(leg.favEspincontrol):"$0"))),
+                  leg.anticipo>0&&h("div",null,
+                    h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:11,color:"#6B7280",marginBottom:3}},
+                      h("span",null,"Ejecucion"),h("span",null,leg.pct+"%")),
+                    h("div",{style:{background:"#E2E8F0",borderRadius:20,height:5,overflow:"hidden"}},
+                      h("div",{style:{width:leg.pct+"%",height:"100%",background:leg.pct<80?"#0F4C81":leg.pct<100?"#F59E0B":"#DC2626",borderRadius:20}}))));
+              })));
         }))),
     gastosIng.length>0&&h(Card,{title:"Gastos Registrados - "+f.ing},
       h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12,alignItems:"flex-end"}},
         h("div",null,
-          h("label",{style:S.lbl},"Filtrar por Proyecto"),
-          h("select",{style:{...S.inp,maxWidth:280},value:filtProy,onChange:function(e){setFiltProy(e.target.value);}},
+          h("label",{style:S.lbl},"Proyecto"),
+          h("select",{style:{...S.inp,maxWidth:240},value:filtProy,onChange:function(e){setFiltProy(e.target.value);setFiltLeg("TODOS");}},
             h("option",{value:"TODOS"},"Todos los proyectos"),
             misComisiones.map(function(com){
               return h("option",{key:com.id,value:com.id},com.cli+" - CC "+com.cc);
             }))),
-        filtProy!=="TODOS"&&h("button",{style:{...S.btnSmGray,alignSelf:"flex-end"},
-          onClick:function(){setFiltProy("TODOS");}},"x Limpiar")),
-      h(Tabla,{gastos:filtProy==="TODOS"?gastosIng:gastosIng.filter(function(g){return Number(g.com_id)===Number(filtProy);}),comisiones,onEdit:cargarEdicion}),
+        h("div",null,
+          h("label",{style:S.lbl},"No. Legalizacion"),
+          h("select",{style:{...S.inp,maxWidth:180},value:filtLeg,onChange:function(e){setFiltLeg(e.target.value);}},
+            h("option",{value:"TODOS"},"Todas"),
+            (function(){
+              var src=filtProy==="TODOS"?gastosIng:gastosIng.filter(function(g){return Number(g.com_id)===Number(filtProy);});
+              var nums=[...new Set(src.map(function(g){return Number(g.num_legalizacion)||1;}))].sort(function(a,b){return a-b;});
+              return nums.map(function(n){return h("option",{key:n,value:n},"Leg. #"+n);});
+            })())),
+        (filtProy!=="TODOS"||filtLeg!=="TODOS")&&h("button",{style:{...S.btnSmGray,alignSelf:"flex-end"},
+          onClick:function(){setFiltProy("TODOS");setFiltLeg("TODOS");}},"x Limpiar")),
+      h(Tabla,{gastos:(function(){var g=filtProy==="TODOS"?gastosIng:gastosIng.filter(function(g){return Number(g.com_id)===Number(filtProy);});return filtLeg==="TODOS"?g:g.filter(function(g){return (Number(g.num_legalizacion)||1)===Number(filtLeg);});})(),comisiones,onEdit:cargarEdicion}),
       h("div",{style:S.resumen},"Total: ",h("strong",null,fmt(total))," \u00B7 ",gastosIng.length," gastos"),
       h("button",{style:S.btnBlue,onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos)},"Exportar Excel FO-AF-002")));
 }
@@ -990,6 +1019,7 @@ function Tabla({gastos,comisiones,onDel,onEdit,showIng}){
         h("tr",{key:g.id,style:S.tr},
           showIng&&h("td",{style:S.td},h("strong",null,g.ing?.split(" ")[0])),
           h("td",{style:S.td},h("span",{style:S.badgeGreen},comLabel(g)||"\u2014")),
+          h("td",{style:{...S.td,textAlign:"center"}},h("span",{style:{background:"#7C3AED",color:"#fff",borderRadius:6,padding:"1px 7px",fontSize:11,fontWeight:700}},"#"+(g.num_legalizacion||1))),
           h("td",{style:S.td},g.fp),
           h("td",{style:S.td},g.est),
           h("td",{style:S.td},g.nit),
