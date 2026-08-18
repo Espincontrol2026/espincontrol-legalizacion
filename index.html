@@ -793,7 +793,7 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
   const filt=gastos.filter(g=>{
     if(fi!=="TODOS"&&g.ing!==fi)return false;
     if(fc!=="TODOS"&&g.con!==fc)return false;
-    if(fcom!=="TODOS"&&String(g.comId)!==fcom)return false;
+    if(fcom!=="TODOS"&&String(g.com_id)!==fcom)return false;
     if(fd&&g.fp<fd)return false;
     if(fh&&g.fp>fh)return false;
     return true;
