@@ -639,7 +639,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
               h("div",{style:{display:"flex",gap:6,marginTop:4}},
                 h("span",{style:S.comTag},"CC "+c.cc),
                 h("span",{style:{...S.comTag,background:"#D1FAE5",color:"#065F46"}},
-                  gastos.filter(g=>g.comId===c.id).length+" gastos"))),
+                  gastos.filter(g=>Number(g.com_id)===Number(c.id)).length+" gastos"))),
             perfil!=="ing"&&h("button",{style:S.btnSmRed,onClick:()=>onDelC(c.id)},"Cerrar")))),
       perfil!=="ing"&&h("button",{style:{...S.btnSm,width:"100%"},onClick:()=>setShowNuevaCom(true)},"+ Nuevo Proyecto")),
 
