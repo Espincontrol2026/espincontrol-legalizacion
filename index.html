@@ -185,7 +185,7 @@ async function ocr(base64,mediaType){
 }
 
 //  Excel 
-function exportarExcel(gastos,comisiones,ingeniero,anticipos){
+function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
   const wb=new ExcelJS.Workbook();
   wb.creator="ESPINCONTROL";
 
@@ -205,7 +205,8 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos){
   };
 
   comisiones.forEach(com=>{
-    const gg=gastos.filter(g=>Number(g.com_id)===Number(com.id));
+    var gg=gastos.filter(g=>Number(g.com_id)===Number(com.id));
+    if(numLegFiltro&&numLegFiltro!=="TODOS")gg=gg.filter(g=>(Number(g.num_legalizacion)||1)===Number(numLegFiltro));
     if(!gg.length)return;
     const ef=gg.filter(g=>g.mp==="EFECTIVO").reduce((s,g)=>s+num(g.tc),0);
     const tj=gg.filter(g=>g.mp==="TARJETA").reduce((s,g)=>s+num(g.tc),0);
@@ -217,9 +218,17 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos){
     const ws=wb.addWorksheet(nombre);
 
     ws.columns=[
-      {key:"item",width:6},{key:"fecha",width:13},{key:"est",width:30},
-      {key:"nit",width:16},{key:"fac",width:14},{key:"con",width:22},
-      {key:"sub",width:14},{key:"iva",width:12},{key:"tarjeta",width:16},{key:"efectivo",width:16}
+      {header:"Item",key:"item",width:6},
+      {header:"Leg.",key:"leg",width:7},
+      {header:"Fecha",key:"fecha",width:13},
+      {header:"Establecimiento",key:"est",width:30},
+      {header:"NIT",key:"nit",width:16},
+      {header:"Factura",key:"fac",width:14},
+      {header:"Concepto",key:"con",width:22},
+      {header:"Subtotal",key:"sub",width:14},
+      {header:"IVA",key:"iva",width:12},
+      {header:"Tarjeta",key:"tarjeta",width:16},
+      {header:"Efectivo",key:"efectivo",width:16}
     ];
 
     // Fila titulo
@@ -259,11 +268,11 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos){
     ws.getCell("A4").value="BALANCE DE ANTICIPO";
     ws.getCell("A4").font={bold:true,color:{argb:"FF"+blanco}};
     ws.getCell("A4").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+azul}};
-    ws.getCell("D4").value="Anticipo: "+(totalAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ws.getCell("F4").value="Gastado: "+(ef+tj).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ws.getCell("H4").value=saldoAnt>=0?"Disponible:":"Excedido:";
-    ws.getCell("I4").value=Math.abs(saldoAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ["D4","F4","H4","I4"].forEach(addr=>{
+    ws.getCell("E4").value="Anticipo: "+(totalAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ws.getCell("G4").value="Gastado: "+(ef+tj).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ws.getCell("J4").value=saldoAnt>=0?"Disponible:":"Excedido:";
+    ws.getCell("J4").value=Math.abs(saldoAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ["E4","G4","I4","J4"].forEach(addr=>{
       ws.getCell(addr).font={bold:true,color:{argb:saldoAnt>=0?"FF065F46":"FFDC2626"}};
       ws.getCell(addr).fill={type:"pattern",pattern:"solid",fgColor:{argb:saldoAnt>=0?"FFD1FAE5":"FFFEE2E2"}};
     });
@@ -273,7 +282,7 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos){
     ws.addRow([]);
 
     // Encabezados tabla
-    const hdrRow=ws.addRow(["Item","Fecha","Establecimiento","NIT","Factura","Concepto","Subtotal","IVA","Tarjeta","Efectivo"]);
+    const hdrRow=ws.addRow(["Item","Leg.","Fecha","Establecimiento","NIT","Factura","Concepto","Subtotal","IVA","Tarjeta","Efectivo"]);
     hdrRow.height=16;
     hdrRow.eachCell(cell=>{
       cell.font={bold:true,color:{argb:"FF"+blanco},size:10};
@@ -293,14 +302,14 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos){
     gg.forEach((g,i)=>{
       const bg=i%2===0?blanco:grisClaro;
       const row=ws.addRow([
-        i+1, g.fp, g.est, g.nit, g.fac, g.con,
+        i+1, Number(g.num_legalizacion)||1, g.fp, g.est, g.nit, g.fac, g.con,
         num(g.sub), num(g.iva),
         g.mp==="TARJETA"?num(g.tc):0,
         g.mp==="EFECTIVO"?num(g.tc):0
       ]);
       row.height=15;
       estFila(row,bg);
-      ["G","H","I","J"].forEach(col=>{
+      ["H","I","J","K"].forEach(col=>{
         const cell=row.getCell(col);
         cell.numFmt='"$"#,##0';
         cell.alignment={horizontal:"right",vertical:"middle"};
@@ -315,10 +324,10 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos){
     // Fila totales
     const totRow=ws.addRow([
       "","","","","","TOTALES",
-      {formula:"SUM(G"+filaInicio+":G"+filaFin+")"},
       {formula:"SUM(H"+filaInicio+":H"+filaFin+")"},
       {formula:"SUM(I"+filaInicio+":I"+filaFin+")"},
-      {formula:"SUM(J"+filaInicio+":J"+filaFin+")"}
+      {formula:"SUM(J"+filaInicio+":J"+filaFin+")"},
+      {formula:"SUM(K"+filaInicio+":K"+filaFin+")"}
     ]);
     totRow.height=16;
     totRow.eachCell(cell=>{
@@ -331,7 +340,7 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos){
         right:{style:"thin",color:{argb:"FFE2E8F0"}}
       };
     });
-    ["G","H","I","J"].forEach(col=>{
+    ["H","I","J","K"].forEach(col=>{
       totRow.getCell(col).numFmt='"$"#,##0';
       totRow.getCell(col).alignment={horizontal:"right"};
     });
@@ -360,7 +369,8 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos){
 
   let totEf=0,totTj=0,totIVA=0,totN=0;
   comisiones.forEach((com,ci)=>{
-    const gg=gastos.filter(g=>Number(g.com_id)===Number(com.id));
+    var gg=gastos.filter(g=>Number(g.com_id)===Number(com.id));
+    if(numLegFiltro&&numLegFiltro!=="TODOS")gg=gg.filter(g=>(Number(g.num_legalizacion)||1)===Number(numLegFiltro));
     if(!gg.length)return;
     const ef=gg.filter(g=>g.mp==="EFECTIVO").reduce((s,g)=>s+num(g.tc),0);
     const tj=gg.filter(g=>g.mp==="TARJETA").reduce((s,g)=>s+num(g.tc),0);
@@ -774,7 +784,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
           onClick:function(){setFiltProy("TODOS");setFiltLeg("TODOS");}},"x Limpiar")),
       h(Tabla,{gastos:(function(){var g=filtProy==="TODOS"?gastosIng:gastosIng.filter(function(g){return Number(g.com_id)===Number(filtProy);});return filtLeg==="TODOS"?g:g.filter(function(g){return (Number(g.num_legalizacion)||1)===Number(filtLeg);});})(),comisiones,onEdit:cargarEdicion}),
       h("div",{style:S.resumen},"Total: ",h("strong",null,fmt(total))," \u00B7 ",gastosIng.length," gastos"),
-      h("button",{style:S.btnBlue,onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos)},"Exportar Excel FO-AF-002")));
+      h("button",{style:S.btnBlue,onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos,filtLeg)},"Exportar Excel FO-AF-002")));
 }
 
 //  Vista Contabilidad 
