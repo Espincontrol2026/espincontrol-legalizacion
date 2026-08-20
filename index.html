@@ -372,7 +372,7 @@ async function ocr(base64,mediaType){
 }
 
 //  Excel 
-function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
+function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro,conFotos){
   const wb=new ExcelJS.Workbook();
   wb.creator="ESPINCONTROL";
 
@@ -568,36 +568,41 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
   });
   [4,5,6,7].forEach(col=>{ totR.getCell(col).numFmt='"$"#,##0'; totR.getCell(col).alignment={horizontal:"right"}; });
 
-  // Exportar como ZIP con Excel + fotos
   wb.xlsx.writeBuffer().then(async function(buffer){
-    const zip=new JSZip();
     const nombreBase="Legalizacion_"+ingeniero.replace(/ /g,"_")+"_"+today();
-    zip.file(nombreBase+".xlsx",buffer);
-    const fotoPromesas=[];
-    comisiones.forEach(function(com){
-      var gg=gastos.filter(function(g){return(Number(g.com_id)===com.id||g.com_id===String(com.id))&&g.ing===ingeniero;});
-      if(numLegFiltro&&numLegFiltro!=="TODOS")gg=gg.filter(function(g){return(Number(g.num_legalizacion)||1)===Number(numLegFiltro);});
-      gg.forEach(function(g){
-        if(g.foto_url){
-          const carpetaZip=com.cli.replace(/[^a-zA-Z0-9]/g,"-")+"-CC"+com.cc;
-          const ext=g.foto_url.includes(".png")?"png":g.foto_url.includes(".webp")?"webp":"jpg";
-          const nombreFoto=(g.est||"recibo").replace(/[^a-zA-Z0-9]/g,"-").slice(0,20)+"_"+g.fp+"."+ext;
-          const p=fetch(g.foto_url)
-            .then(function(r){return r.arrayBuffer();})
-            .then(function(ab){zip.folder(carpetaZip).file(nombreFoto,ab);})
-            .catch(function(e){console.warn("No se pudo descargar foto:",e);});
-          fotoPromesas.push(p);
-        }
+    if(!conFotos){
+      const blob=new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url; a.download=nombreBase+".xlsx"; a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const zip=new JSZip();
+      zip.file(nombreBase+".xlsx",buffer);
+      const fotoPromesas=[];
+      comisiones.forEach(function(com){
+        var gg=gastos.filter(function(g){return(Number(g.com_id)===com.id||g.com_id===String(com.id))&&g.ing===ingeniero;});
+        if(numLegFiltro&&numLegFiltro!=="TODOS")gg=gg.filter(function(g){return(Number(g.num_legalizacion)||1)===Number(numLegFiltro);});
+        gg.forEach(function(g){
+          if(g.foto_url){
+            const carpetaZip=com.cli.replace(/[^a-zA-Z0-9]/g,"-")+"-CC"+com.cc;
+            const ext=g.foto_url.includes(".png")?"png":g.foto_url.includes(".webp")?"webp":"jpg";
+            const nombreFoto=(g.est||"recibo").replace(/[^a-zA-Z0-9]/g,"-").slice(0,20)+"_"+g.fp+"."+ext;
+            const p=fetch(g.foto_url)
+              .then(function(r){return r.arrayBuffer();})
+              .then(function(ab){zip.folder(carpetaZip).file(nombreFoto,ab);})
+              .catch(function(e){console.warn("Error foto:",e);});
+            fotoPromesas.push(p);
+          }
+        });
       });
-    });
-    await Promise.all(fotoPromesas);
-    const zipBlob=await zip.generateAsync({type:"blob"});
-    const url=URL.createObjectURL(zipBlob);
-    const a=document.createElement("a");
-    a.href=url;
-    a.download=nombreBase+".zip";
-    a.click();
-    URL.revokeObjectURL(url);
+      await Promise.all(fotoPromesas);
+      const zipBlob=await zip.generateAsync({type:"blob"});
+      const url=URL.createObjectURL(zipBlob);
+      const a=document.createElement("a");
+      a.href=url; a.download=nombreBase+".zip"; a.click();
+      URL.revokeObjectURL(url);
+    }
   });
 }
 
@@ -957,7 +962,9 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
           onClick:function(){setFiltProy("TODOS");setFiltLeg("TODOS");}},"x Limpiar")),
       h(Tabla,{gastos:(function(){var g=filtProy==="TODOS"?gastosIng:gastosIng.filter(function(g){return Number(g.com_id)===Number(filtProy);});return filtLeg==="TODOS"?g:g.filter(function(g){return (Number(g.num_legalizacion)||1)===Number(filtLeg);});})(),comisiones,onEdit:cargarEdicion}),
       h("div",{style:S.resumen},"Total: ",h("strong",null,fmt(total))," \u00B7 ",gastosIng.length," gastos"),
-      h("button",{style:S.btnBlue,onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos,filtLeg)},"Exportar Excel FO-AF-002")));
+      h("button",{style:S.btnBlue,onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos,filtLeg,false)},"Solo Excel"),
+          h("button",{style:{...S.btnBlue,background:"#065F46"},
+            onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos,filtLeg,true)},"Excel + Fotos")));
 }
 
 //  Vista Contabilidad 
@@ -1187,10 +1194,20 @@ h("div",{style:S.kpiRow},
               ings.forEach(ing=>{
                 const gc=filt.filter(g=>g.ing===ing);
                 const cc=comisiones.filter(c=>gc.some(g=>Number(g.com_id)===c.id||g.com_id===String(c.id)));
-                exportarExcel(gc,cc,ing,anticipos);
+                exportarExcel(gc,cc,ing,anticipos,fleg,false);
               });
               setModal(false);
-            }}," Confirmar y Descargar"),
+            }},"Solo Excel"),
+          h("button",{style:{...S.btnOrange,marginTop:0,flex:1,background:"#065F46"},
+            onClick:()=>{
+              const ings=[...new Set(filt.map(g=>g.ing))];
+              ings.forEach(ing=>{
+                const gc=filt.filter(g=>g.ing===ing);
+                const cc=comisiones.filter(c=>gc.some(g=>Number(g.com_id)===c.id||g.com_id===String(c.id)));
+                exportarExcel(gc,cc,ing,anticipos,fleg,true);
+              });
+              setModal(false);
+            }},"Excel + Fotos"),
           h("button",{style:{...S.btnOrange,marginTop:0,flex:1,background:"#F1F5F9",color:"#374151"},onClick:()=>setModal(false)},"Cancelar"))))));
 }
 
@@ -1206,6 +1223,7 @@ function Tabla({gastos,comisiones,onDel,onEdit,showIng}){
       h("thead",null,h("tr",null,
         showIng&&h("th",{style:S.th},"Ingeniero"),
         h("th",{style:S.th},"Proyecto"),
+        h("th",{style:{...S.th,textAlign:"center"}},"Leg."),
         h("th",{style:S.th},"Fecha"),h("th",{style:S.th},"Establecimiento"),
         h("th",{style:S.th},"NIT"),h("th",{style:S.th},"Concepto"),
         h("th",{style:S.thR},"Subtotal"),h("th",{style:S.thR},"IVA"),h("th",{style:S.thR},"Total"),
