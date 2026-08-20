@@ -185,11 +185,198 @@ async function ocr(base64,mediaType){
 }
 
 //  Excel 
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <meta name="theme-color" content="#0F4C81"/>
+  <title>ESPINCONTROL - Legalizacion de Anticipos</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',system-ui,sans-serif;background:#F0F4F8}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const CONCEPTOS=["ALIMENTACI\u00D3N","HOSPEDAJE","COMBUSTIBLE","PEAJES / TRANSPORTE","DOTACI\u00D3N / HSE","PAPELER\u00CDA","MATERIAL"];
+const INGENIEROS=["Felipe Rodriguez","Leidy Camacho","Luis Salinas","Nelson Chaparro"];
+const SUPA_URL="https://wottrelakdopxzpcfaos.supabase.co";
+const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvdHRyZWxha2RvcHh6cGNmYW9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3NTY4MzYsImV4cCI6MjEwMDMzMjgzNn0.bMqMkniuTmR7JyYYM_Cd6hwD_aX_BLdZDhHSPN7p9HM";
+const {useState,useEffect,useRef,createElement:h}=React;
+
+const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
+
+const loadG=async()=>{const{data}=await sb.from("gastos").select("*").order("timestamp",{ascending:true});return data||[];};
+const saveG=async(gastos)=>{};
+const subirFoto=async(base64,mediaType,carpeta,nombre)=>{
+  try{
+    const blob=await fetch("data:"+mediaType+";base64,"+base64).then(r=>r.blob());
+    const path=carpeta+"/"+nombre;
+    const{error}=await sb.storage.from("evidencias").upload(path,blob,{contentType:mediaType,upsert:true});
+    if(error){console.error("Error subiendo foto:",error);return null;}
+    const{data}=sb.storage.from("evidencias").getPublicUrl(path);
+    return data.publicUrl;
+  }catch(e){console.error("Error foto:",e);return null;}
+};
+
+const addGasto=async(g)=>{await sb.from("gastos").insert([{
+  ing:g.ing,com_id:g.comId||null,com_cli:g.comCli||null,com_cc:g.comCc||null,
+  est:g.est,nit:g.nit,fac:g.fac,con:g.con,
+  sub:Number(g.sub)||0,iva:Number(g.iva)||0,tc:Number(g.tc)||0,
+  fp:g.fp,mp:g.mp,foto_url:g.fotoUrl||null,num_legalizacion:g.numLeg?Number(g.numLeg):null
+}]);};
+const delGasto=async(id)=>{await sb.from("gastos").delete().eq("id",id);};
+const editGasto=async(g)=>{await sb.from("gastos").update({
+  ing:g.ing,com_id:g.comId||null,com_cli:g.comCli||null,com_cc:g.comCc||null,
+  est:g.est,nit:g.nit,fac:g.fac,con:g.con,
+  sub:Number(g.sub)||0,iva:Number(g.iva)||0,tc:Number(g.tc)||0,
+  fp:g.fp,mp:g.mp
+}).eq("id",g.id);};
+
+const loadC=async()=>{const{data}=await sb.from("comisiones").select("*").order("created_at",{ascending:true});return data||[];};
+const saveC=async(c)=>{};
+const addComision=async(com)=>{const{data,error}=await sb.from("comisiones").insert([{ing:com.ing||"",cli:com.cli,cc:com.cc}]).select();if(error)console.error("Error creando proyecto:",error);return data?.[0];};
+const delComision=async(id,comisiones,gastos)=>{
+  try{
+    // Buscar la comision para construir el nombre de carpeta
+    const com=comisiones.find(x=>x.id===id);
+    if(com){
+      const carpeta=(com.cli+"-CC"+com.cc).replace(/[^a-zA-Z0-9-_]/g,"-").slice(0,50);
+      // Listar y borrar todas las fotos de esa carpeta
+      const{data:archivos}=await sb.storage.from("evidencias").list(carpeta);
+      if(archivos&&archivos.length>0){
+        const paths=archivos.map(f=>carpeta+"/"+f.name);
+        await sb.storage.from("evidencias").remove(paths);
+        console.log("Fotos eliminadas:",paths.length);
+      }
+      // Intentar borrar tambien por nombre de carpeta con gastos
+      const gastosComision=(gastos||[]).filter(g=>Number(g.com_id)===id||g.com_id===String(id));
+      // Borrar fotos referenciadas en gastos
+      const fotoPaths=gastosComision.filter(g=>g.foto_url).map(g=>{
+        const url=g.foto_url;
+        const idx=url.indexOf("/evidencias/");
+        return idx>=0?decodeURIComponent(url.slice(idx+12)):null;
+      }).filter(Boolean);
+      if(fotoPaths.length>0){
+        await sb.storage.from("evidencias").remove(fotoPaths);
+      }
+    }
+  }catch(e){console.error("Error borrando fotos:",e);}
+  // Borrar anticipos del proyecto
+  await sb.from("anticipos").delete().eq("com_id",id);
+  // Borrar la comision
+  await sb.from("comisiones").delete().eq("id",id);
+};
+
+const loadA=async()=>{const{data}=await sb.from("anticipos").select("*").order("fecha",{ascending:true});return data||[];};
+const addAnticipo=async(a)=>{await sb.from("anticipos").insert([{ing:a.ing,com_id:a.comId||null,valor:Number(a.valor),nota:a.nota||"",fecha:a.fecha,num_legalizacion:Number(a.numLeg)||1}]);};
+const delAnticipo=async(id)=>{await sb.from("anticipos").delete().eq("id",id);};
+const fmt=(v)=>Number(v||0).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+const num=(v)=>parseFloat(v)||0;
+const today=()=>new Date().toISOString().split("T")[0];
+
+//  Estilos 
+const S={
+  root:{fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#F0F4F8",minHeight:"100vh"},
+  header:{background:"#0F4C81",padding:"0 20px",boxShadow:"0 2px 12px rgba(0,0,0,.15)"},
+  hInner:{maxWidth:1100,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,padding:"14px 0"},
+  brand:{display:"flex",alignItems:"center",gap:12},
+  brandIcon:{width:42,height:42,borderRadius:10,background:"#FF6B35",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:20,color:"#fff"},
+  brandName:{color:"#fff",fontWeight:800,fontSize:17,letterSpacing:1},
+  brandSub:{color:"#93C5FD",fontSize:12},
+  tabs:{display:"flex",gap:6},
+  tab:{padding:"8px 18px",borderRadius:8,border:"none",background:"rgba(255,255,255,.12)",color:"#CBD5E1",cursor:"pointer",fontWeight:600,fontSize:13},
+  tabOn:{padding:"8px 18px",borderRadius:8,border:"none",background:"#FF6B35",color:"#fff",cursor:"pointer",fontWeight:600,fontSize:13},
+  main:{maxWidth:1100,margin:"0 auto",padding:"24px 16px"},
+  col:{display:"flex",flexDirection:"column",gap:20},
+  card:{background:"#fff",borderRadius:16,padding:"20px 24px",boxShadow:"0 1px 8px rgba(0,0,0,.07)"},
+  cardTitle:{fontWeight:800,fontSize:15,color:"#0F4C81",marginBottom:16},
+  g2:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"14px 20px"},
+  lbl:{display:"block",fontSize:12,fontWeight:600,color:"#6B7280",marginBottom:5,textTransform:"uppercase",letterSpacing:.5},
+  inp:{width:"100%",padding:"9px 12px",border:"1.5px solid #E2E8F0",borderRadius:8,fontSize:14,color:"#1E293B",background:"#FAFAFA",boxSizing:"border-box",outline:"none"},
+  inpSm:{padding:"7px 10px",border:"1.5px solid #E2E8F0",borderRadius:8,fontSize:13,color:"#1E293B",background:"#FAFAFA",outline:"none"},
+  fotoZone:{border:"2px dashed #CBD5E1",borderRadius:12,minHeight:160,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative",overflow:"hidden",background:"#F8FAFC"},
+  fotoPH:{display:"flex",flexDirection:"column",alignItems:"center",padding:20,gap:8},
+  previewImg:{width:"100%",maxHeight:280,objectFit:"contain"},
+  ocrOv:{position:"absolute",inset:0,background:"rgba(15,76,129,.85)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12},
+  ocrSpin:{width:36,height:36,border:"4px solid rgba(255,255,255,.3)",borderTop:"4px solid #fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"},
+  ocrBadge:{position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",background:"#065F46",color:"#fff",padding:"5px 14px",borderRadius:20,fontSize:12,fontWeight:600,whiteSpace:"nowrap"},
+  totalRow:{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#EFF6FF",borderRadius:10,padding:"12px 16px",marginTop:16},
+  totalLbl:{fontWeight:700,color:"#0F4C81",fontSize:14},
+  totalVal:{fontWeight:900,color:"#0F4C81",fontSize:22},
+  btnOrange:{width:"100%",padding:13,background:"#FF6B35",color:"#fff",border:"none",borderRadius:10,fontWeight:800,fontSize:15,cursor:"pointer",marginTop:12},
+  btnBlue:{width:"100%",padding:13,background:"#0F4C81",color:"#fff",border:"none",borderRadius:10,fontWeight:800,fontSize:15,cursor:"pointer",marginTop:12},
+  btnGreen:{width:"100%",padding:13,background:"#065F46",color:"#fff",border:"none",borderRadius:10,fontWeight:800,fontSize:15,cursor:"pointer",marginTop:12},
+  btnSm:{padding:"8px 16px",background:"#0F4C81",color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:13,cursor:"pointer"},
+  btnSmGray:{padding:"8px 16px",background:"#F1F5F9",color:"#6B7280",border:"none",borderRadius:8,fontWeight:700,fontSize:13,cursor:"pointer"},
+  btnSmRed:{padding:"6px 12px",background:"#FEE2E2",color:"#DC2626",border:"none",borderRadius:6,fontWeight:700,fontSize:12,cursor:"pointer"},
+  btnDel:{background:"#FEE2E2",color:"#DC2626",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontWeight:700,fontSize:13},
+  kpiRow:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:14},
+  kpi:{background:"#fff",borderRadius:14,padding:"18px 20px",boxShadow:"0 1px 6px rgba(0,0,0,.06)"},
+  ingCard:{background:"#fff",borderRadius:14,padding:"14px 18px",boxShadow:"0 1px 6px rgba(0,0,0,.06)",borderLeft:"4px solid #0F4C81"},
+  table:{width:"100%",borderCollapse:"collapse",fontSize:13},
+  th:{textAlign:"left",padding:"8px 10px",background:"#F1F5F9",color:"#64748B",fontWeight:700,fontSize:11,textTransform:"uppercase",borderBottom:"2px solid #E2E8F0"},
+  thR:{textAlign:"right",padding:"8px 10px",background:"#F1F5F9",color:"#64748B",fontWeight:700,fontSize:11,textTransform:"uppercase",borderBottom:"2px solid #E2E8F0"},
+  tr:{borderBottom:"1px solid #F1F5F9"},
+  td:{padding:"9px 10px",color:"#374151",verticalAlign:"middle"},
+  tdR:{padding:"9px 10px",color:"#374151",textAlign:"right",verticalAlign:"middle",fontFamily:"monospace"},
+  badge:{background:"#EFF6FF",color:"#1D4ED8",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:700},
+  badgeGreen:{background:"#D1FAE5",color:"#065F46",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:700},
+  tagEf:{background:"#D1FAE5",color:"#065F46",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:700},
+  tagTj:{background:"#EDE9FE",color:"#5B21B6",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:700},
+  resumen:{marginTop:14,padding:"10px 14px",background:"#F8FAFC",borderRadius:8,fontSize:13,color:"#374151",borderTop:"1px solid #E2E8F0"},
+  filtLbl:{fontSize:11,fontWeight:600,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:.4,marginBottom:4},
+  filtBadge:{background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 12px",fontSize:13,color:"#1D4ED8",marginBottom:12},
+  empty:{textAlign:"center",color:"#9CA3AF",padding:40,fontSize:14},
+  modalBg:{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000},
+  modal:{background:"#fff",borderRadius:16,padding:28,maxWidth:460,width:"90%",boxShadow:"0 20px 60px rgba(0,0,0,.3)"},
+  modalTitle:{fontWeight:800,fontSize:17,color:"#0F4C81",marginBottom:12},
+  comCard:{background:"#F8FAFC",border:"1.5px solid #E2E8F0",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8},
+  comTag:{background:"#0F4C81",color:"#fff",borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:700},
+};
+
+//  OCR 
+const API_KEY_STORAGE="espincontrol_ak";
+const getApiKey=()=>localStorage.getItem(API_KEY_STORAGE)||"";
+const setApiKey=(k)=>localStorage.setItem(API_KEY_STORAGE,k);
+
+async function ocr(base64,mediaType){
+  const apiKey=getApiKey();
+  if(!apiKey) throw new Error("API key no configurada - usa el boton Configurar");
+  const prompt='Analiza este recibo colombiano. Responde SOLO JSON sin markdown: {"establecimiento":"","nit":"","factura":"","subtotal":0,"iva":0,"total":0,"concepto_sugerido":"ALIMENTACION","fecha":""} concepto_sugerido debe ser uno de: ALIMENTACION, HOSPEDAJE, COMBUSTIBLE, PEAJES / TRANSPORTE, ALQUILER DE VEHICULO, MATERIAL, OTROS. Campos ilegibles: cadena vacia o 0.';
+  const r=await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-haiku-4-5",max_tokens:500,
+      messages:[{role:"user",content:
+        mediaType==="application/pdf"
+          ?[{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}},{type:"text",text:prompt}]
+          :[{type:"image",source:{type:"base64",media_type:mediaType,data:base64}},{type:"text",text:prompt}]
+      }]})
+  });
+  if(!r.ok){const t=await r.text();throw new Error("HTTP "+r.status+": "+t.slice(0,80));}
+  const d=await r.json();
+  if(d.error) throw new Error(d.error.type+": "+d.error.message);
+  const t=d.content&&d.content.find(function(b){return b.type==="text";});
+  if(!t) throw new Error("Respuesta vacia del servidor");
+  return JSON.parse(t.text.replace(/```json|```/g,"").trim());
+}
+
+//  Excel 
 function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
   const wb=new ExcelJS.Workbook();
   wb.creator="ESPINCONTROL";
 
-  const azul="0F4C81", naranja="FF6B35", grisClaro="F1F5F9", azulClaro="EFF6FF", blanco="FFFFFF";
+  const azul="0F4C81", grisClaro="F1F5F9", azulClaro="EFF6FF", blanco="FFFFFF", verde="065F46", rojo="DC2626", verdeBg="D1FAE5", rojoBg="FEE2E2";
 
   const estFila=(row,bg)=>{
     row.eachCell(cell=>{
@@ -204,16 +391,30 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     });
   };
 
+  const fmt2=(v)=>v.toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+  const celdaBalance=(ws,addr,label,valor,colorFuente,colorFondo)=>{
+    ws.getCell(addr).value=label+": "+fmt2(valor);
+    ws.getCell(addr).font={bold:true,size:10,color:{argb:"FF"+colorFuente}};
+    ws.getCell(addr).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+colorFondo}};
+    ws.getCell(addr).alignment={vertical:"middle"};
+  };
+
   comisiones.forEach(com=>{
     var gg=gastos.filter(g=>Number(g.com_id)===Number(com.id));
     if(numLegFiltro&&numLegFiltro!=="TODOS")gg=gg.filter(g=>(Number(g.num_legalizacion)||1)===Number(numLegFiltro));
     if(!gg.length)return;
+
     const ef=gg.filter(g=>g.mp==="EFECTIVO").reduce((s,g)=>s+num(g.tc),0);
     const tj=gg.filter(g=>g.mp==="TARJETA").reduce((s,g)=>s+num(g.tc),0);
+    const totalGastado=ef+tj;
+
     const antCom=(anticipos||[]).filter(a=>Number(a.com_id)===Number(com.id));
     const antFilt=numLegFiltro&&numLegFiltro!=="TODOS"?antCom.filter(a=>(Number(a.num_legalizacion)||1)===Number(numLegFiltro)):antCom;
     const totalAnt=antFilt.reduce((s,a)=>s+num(a.valor),0);
-    const saldoAnt=totalAnt-(ef+tj);
+
+    const diff=totalGastado-totalAnt;
+    const favEmpleado=totalAnt===0?totalGastado:diff>0?diff:0;
+    const favEspincontrol=totalAnt>0&&diff<0?Math.abs(diff):0;
 
     const nombre=(ingeniero.split(" ")[0]+" CC"+com.cc).slice(0,28);
     const ws=wb.addWorksheet(nombre);
@@ -225,7 +426,7 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
       {key:"tarjeta",width:16},{key:"efectivo",width:16}
     ];
 
-    // Fila titulo
+    // Fila 1: Titulo
     ws.mergeCells("A1:K1");
     const t1=ws.getCell("A1");
     t1.value="ESPINCONTROL S.A.S. - Legalizacion de Anticipo";
@@ -234,7 +435,7 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     t1.alignment={horizontal:"center",vertical:"middle"};
     ws.getRow(1).height=22;
 
-    // Fila info
+    // Fila 2: Info ingeniero
     ws.mergeCells("A2:K2");
     const t2=ws.getCell("A2");
     t2.value=ingeniero+" | Cliente: "+com.cli+" | CC: "+com.cc;
@@ -243,38 +444,28 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     t2.alignment={horizontal:"center",vertical:"middle"};
     ws.getRow(2).height=18;
 
-    // Fila totales resumen
-    ws.mergeCells("A3:G3");
-    ws.getCell("A3").value="";
-    ws.getCell("H3").value="Efectivo: "+ef.toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ws.getCell("I3").value="";
-    ws.getCell("J3").value="Tarjeta: "+tj.toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ws.getCell("K3").value="Total: "+(ef+tj).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ["H3","J3","K3"].forEach(addr=>{
-      ws.getCell(addr).font={bold:true,color:{argb:"FF"+azul}};
-      ws.getCell(addr).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+grisClaro}};
-    });
-    ws.getRow(3).height=16;
-
-    // Fila balance anticipo
-    ws.mergeCells("A4:D4");
-    ws.getCell("A4").value="BALANCE DE ANTICIPO";
-    ws.getCell("A4").font={bold:true,color:{argb:"FF"+blanco}};
-    ws.getCell("A4").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+azul}};
-    ws.getCell("F4").value="Anticipo: "+(totalAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ws.getCell("H4").value="Gastado: "+(ef+tj).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ws.getCell("J4").value=saldoAnt>=0?"Disponible:":"Excedido:";
-    ws.getCell("K4").value=Math.abs(saldoAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ["F4","H4","J4","K4"].forEach(addr=>{
-      ws.getCell(addr).font={bold:true,color:{argb:saldoAnt>=0?"FF065F46":"FFDC2626"}};
-      ws.getCell(addr).fill={type:"pattern",pattern:"solid",fgColor:{argb:saldoAnt>=0?"FFD1FAE5":"FFFEE2E2"}};
-    });
-    ws.getRow(4).height=16;
-
-    // Fila vacia
+    // Fila 3: Vacia
     ws.addRow([]);
+    ws.getRow(3).height=8;
 
-    // Encabezados tabla
+    // Fila 4: Balance del anticipo
+    ws.mergeCells("A4:E4");
+    ws.getCell("A4").value="BALANCE DE ANTICIPO";
+    ws.getCell("A4").font={bold:true,size:11,color:{argb:"FF"+blanco}};
+    ws.getCell("A4").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+azul}};
+    ws.getCell("A4").alignment={horizontal:"center",vertical:"middle"};
+
+    celdaBalance(ws,"F4","Anticipo",totalAnt,azul,azulClaro);
+    celdaBalance(ws,"G4","Gastado",totalGastado,totalGastado>totalAnt?rojo:verde,totalGastado>totalAnt?rojoBg:verdeBg);
+    celdaBalance(ws,"H4","A favor empleado",favEmpleado,favEmpleado>0?verde:"9CA3AF",favEmpleado>0?verdeBg:grisClaro);
+    celdaBalance(ws,"I4","A favor ESPINCONTROL",favEspincontrol,favEspincontrol>0?verde:"9CA3AF",favEspincontrol>0?verdeBg:grisClaro);
+    ws.getRow(4).height=18;
+
+    // Fila 5: Vacia
+    ws.addRow([]);
+    ws.getRow(5).height=8;
+
+    // Fila 6: Encabezados tabla
     const hdrRow=ws.addRow(["Item","Leg.","Fecha","Establecimiento","NIT","Factura","Concepto","Subtotal","IVA","Tarjeta","Efectivo"]);
     hdrRow.height=16;
     hdrRow.eachCell(cell=>{
@@ -307,8 +498,7 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
         cell.numFmt='"$"#,##0';
         cell.alignment={horizontal:"right",vertical:"middle"};
       });
-      // Resaltar total
-      const totalCol=g.mp==="TARJETA"?"I":"J";
+      const totalCol=g.mp==="TARJETA"?"J":"K";
       row.getCell(totalCol).font={bold:true,color:{argb:"FF"+azul}};
     });
 
@@ -316,7 +506,7 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
 
     // Fila totales
     const totRow=ws.addRow([
-      "","","","","","TOTALES",
+      "","","","","","","TOTALES",
       {formula:"SUM(H"+filaInicio+":H"+filaFin+")"},
       {formula:"SUM(I"+filaInicio+":I"+filaFin+")"},
       {formula:"SUM(J"+filaInicio+":J"+filaFin+")"},
@@ -337,13 +527,12 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
       totRow.getCell(col).numFmt='"$"#,##0';
       totRow.getCell(col).alignment={horizontal:"right"};
     });
-    totRow.getCell("F").alignment={horizontal:"center"};
+    totRow.getCell("G").alignment={horizontal:"center"};
   });
 
   // Hoja resumen
   const wsr=wb.addWorksheet("Resumen");
   wsr.columns=[{width:28},{width:10},{width:10},{width:16},{width:16},{width:14},{width:18}];
-
   wsr.mergeCells("A1:G1");
   const tr=wsr.getCell("A1");
   tr.value="RESUMEN CONSOLIDADO - "+ingeniero;
@@ -351,7 +540,6 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
   tr.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+azul}};
   tr.alignment={horizontal:"center",vertical:"middle"};
   wsr.getRow(1).height=20;
-
   wsr.addRow([]);
   const rHdr=wsr.addRow(["Proyecto","CC","Gastos","Efectivo","Tarjeta","IVA","Total"]);
   rHdr.eachCell(cell=>{
@@ -359,7 +547,6 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+azul}};
     cell.alignment={horizontal:"center"};
   });
-
   let totEf=0,totTj=0,totIVA=0,totN=0;
   comisiones.forEach((com,ci)=>{
     var gg=gastos.filter(g=>Number(g.com_id)===Number(com.id));
@@ -374,7 +561,6 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     estFila(row,bg);
     [4,5,6,7].forEach(col=>{ row.getCell(col).numFmt='"$"#,##0'; row.getCell(col).alignment={horizontal:"right"}; });
   });
-
   const totR=wsr.addRow(["TOTAL","",totN,totEf,totTj,totIVA,totEf+totTj]);
   totR.eachCell(cell=>{
     cell.font={bold:true,color:{argb:"FF"+azul}};
@@ -386,11 +572,7 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
   wb.xlsx.writeBuffer().then(async function(buffer){
     const zip=new JSZip();
     const nombreBase="Legalizacion_"+ingeniero.replace(/ /g,"_")+"_"+today();
-
-    // Agregar Excel al ZIP
     zip.file(nombreBase+".xlsx",buffer);
-
-    // Agregar fotos por proyecto
     const fotoPromesas=[];
     comisiones.forEach(function(com){
       var gg=gastos.filter(function(g){return(Number(g.com_id)===com.id||g.com_id===String(com.id))&&g.ing===ingeniero;});
@@ -408,9 +590,7 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
         }
       });
     });
-
     await Promise.all(fotoPromesas);
-
     const zipBlob=await zip.generateAsync({type:"blob"});
     const url=URL.createObjectURL(zipBlob);
     const a=document.createElement("a");
@@ -420,7 +600,6 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     URL.revokeObjectURL(url);
   });
 }
-
 
 function Card({title,children}){return h("div",{style:S.card},h("div",{style:S.cardTitle},title),children);}
 function F({label,children,wide}){return h("div",{style:{gridColumn:wide?"1 / -1":"auto"}},h("label",{style:S.lbl},label),children);}
@@ -787,7 +966,7 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
   const [newAnt,setNewAnt]=useState({ing:INGENIEROS[0],comId:"",valor:"",nota:"",fecha:today(),numLeg:1});
   const [newProy,setNewProy]=useState({ing:INGENIEROS[0],cli:"",cc:""});
   const [showNuevaProy,setShowNuevaProy]=useState(false);
-  const [fleg,setFleg]=useState("TODOS");
+  const [fc,setFc]=useState("TODOS");
   const [fcom,setFcom]=useState("TODOS");
   const [fd,setFd]=useState("");
   const [fh,setFh]=useState("");
@@ -796,7 +975,7 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
 
   const filt=gastos.filter(g=>{
     if(fi!=="TODOS"&&g.ing!==fi)return false;
-    if(fleg!=="TODOS"&&(Number(g.num_legalizacion)||1)!==Number(fleg))return false;
+    if(fc!=="TODOS"&&g.con!==fc)return false;
     if(fcom!=="TODOS"&&String(g.com_id)!==fcom)return false;
     if(fd&&g.fp<fd)return false;
     if(fh&&g.fp>fh)return false;
@@ -974,16 +1153,9 @@ h("div",{style:S.kpiRow},
           h("select",{style:S.inpSm,value:fcom,onChange:e=>setFcom(e.target.value)},
             h("option",{value:"TODOS"},"Todos"),
             comisiones.map(c=>h("option",{key:c.id,value:String(c.id)},c.cli+" CC"+c.cc)))),
-        h("div",null,h("div",{style:S.filtLbl},"Nº Legaliz."),
-          h("select",{style:S.inpSm,value:fleg,onChange:e=>setFleg(e.target.value)},
-            h("option",{value:"TODOS"},"Todas"),
-            (function(){
-              var src=gastos;
-              if(fi!=="TODOS")src=src.filter(function(g){return g.ing===fi;});
-              if(fcom!=="TODOS")src=src.filter(function(g){return String(g.com_id)===fcom;});
-              var nums=[...new Set(src.map(function(g){return Number(g.num_legalizacion)||1;}))].sort(function(a,b){return a-b;});
-              return nums.map(function(n){return h("option",{key:n,value:n},"Leg. #"+n);});
-            })())),
+        h("div",null,h("div",{style:S.filtLbl},"Concepto"),
+          h("select",{style:S.inpSm,value:fc,onChange:e=>setFc(e.target.value)},
+            h("option",{value:"TODOS"},"Todos"),CONCEPTOS.map(c=>h("option",{key:c},c)))),
         h("div",null,h("div",{style:S.filtLbl},"Desde"),
           h("input",{style:S.inpSm,type:"date",value:fd,onChange:e=>setFd(e.target.value)})),
         h("div",null,h("div",{style:S.filtLbl},"Hasta"),
