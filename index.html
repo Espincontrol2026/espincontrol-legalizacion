@@ -244,14 +244,13 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     ws.getRow(2).height=18;
 
     // Fila totales resumen
-    ws.mergeCells("A3:F3");
+    ws.mergeCells("A3:G3");
     ws.getCell("A3").value="";
-    ws.getCell("G3").value="Efectivo: "+ef.toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ws.getCell("H3").value="Tarjeta: "+tj.toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ws.getCell("H3").value="Efectivo: "+ef.toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
     ws.getCell("I3").value="";
-    ws.getCell("J3").value="Total: "+(ef+tj).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ws.getCell("J3").value="";
-    ["G3","H3","J3"].forEach(addr=>{
+    ws.getCell("J3").value="Tarjeta: "+tj.toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ws.getCell("K3").value="Total: "+(ef+tj).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ["H3","J3","K3"].forEach(addr=>{
       ws.getCell(addr).font={bold:true,color:{argb:"FF"+azul}};
       ws.getCell(addr).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+grisClaro}};
     });
@@ -265,7 +264,7 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     ws.getCell("F4").value="Anticipo: "+(totalAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
     ws.getCell("H4").value="Gastado: "+(ef+tj).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
     ws.getCell("J4").value=saldoAnt>=0?"Disponible:":"Excedido:";
-    ws.getCell("J4").value=Math.abs(saldoAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ws.getCell("K4").value=Math.abs(saldoAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
     ["F4","H4","J4","K4"].forEach(addr=>{
       ws.getCell(addr).font={bold:true,color:{argb:saldoAnt>=0?"FF065F46":"FFDC2626"}};
       ws.getCell(addr).fill={type:"pattern",pattern:"solid",fgColor:{argb:saldoAnt>=0?"FFD1FAE5":"FFFEE2E2"}};
@@ -394,7 +393,8 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     // Agregar fotos por proyecto
     const fotoPromesas=[];
     comisiones.forEach(function(com){
-      const gg=gastos.filter(function(g){return(Number(g.com_id)===com.id||g.com_id===String(com.id))&&g.ing===ingeniero;});
+      var gg=gastos.filter(function(g){return(Number(g.com_id)===com.id||g.com_id===String(com.id))&&g.ing===ingeniero;});
+      if(numLegFiltro&&numLegFiltro!=="TODOS")gg=gg.filter(function(g){return(Number(g.num_legalizacion)||1)===Number(numLegFiltro);});
       gg.forEach(function(g){
         if(g.foto_url){
           const carpetaZip=com.cli.replace(/[^a-zA-Z0-9]/g,"-")+"-CC"+com.cc;
@@ -787,7 +787,7 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
   const [newAnt,setNewAnt]=useState({ing:INGENIEROS[0],comId:"",valor:"",nota:"",fecha:today(),numLeg:1});
   const [newProy,setNewProy]=useState({ing:INGENIEROS[0],cli:"",cc:""});
   const [showNuevaProy,setShowNuevaProy]=useState(false);
-  const [fc,setFc]=useState("TODOS");
+  const [fleg,setFleg]=useState("TODOS");
   const [fcom,setFcom]=useState("TODOS");
   const [fd,setFd]=useState("");
   const [fh,setFh]=useState("");
@@ -796,7 +796,7 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
 
   const filt=gastos.filter(g=>{
     if(fi!=="TODOS"&&g.ing!==fi)return false;
-    if(fc!=="TODOS"&&g.con!==fc)return false;
+    if(fleg!=="TODOS"&&(Number(g.num_legalizacion)||1)!==Number(fleg))return false;
     if(fcom!=="TODOS"&&String(g.com_id)!==fcom)return false;
     if(fd&&g.fp<fd)return false;
     if(fh&&g.fp>fh)return false;
@@ -974,9 +974,16 @@ h("div",{style:S.kpiRow},
           h("select",{style:S.inpSm,value:fcom,onChange:e=>setFcom(e.target.value)},
             h("option",{value:"TODOS"},"Todos"),
             comisiones.map(c=>h("option",{key:c.id,value:String(c.id)},c.cli+" CC"+c.cc)))),
-        h("div",null,h("div",{style:S.filtLbl},"Concepto"),
-          h("select",{style:S.inpSm,value:fc,onChange:e=>setFc(e.target.value)},
-            h("option",{value:"TODOS"},"Todos"),CONCEPTOS.map(c=>h("option",{key:c},c)))),
+        h("div",null,h("div",{style:S.filtLbl},"Nº Legaliz."),
+          h("select",{style:S.inpSm,value:fleg,onChange:e=>setFleg(e.target.value)},
+            h("option",{value:"TODOS"},"Todas"),
+            (function(){
+              var src=gastos;
+              if(fi!=="TODOS")src=src.filter(function(g){return g.ing===fi;});
+              if(fcom!=="TODOS")src=src.filter(function(g){return String(g.com_id)===fcom;});
+              var nums=[...new Set(src.map(function(g){return Number(g.num_legalizacion)||1;}))].sort(function(a,b){return a-b;});
+              return nums.map(function(n){return h("option",{key:n,value:n},"Leg. #"+n);});
+            })())),
         h("div",null,h("div",{style:S.filtLbl},"Desde"),
           h("input",{style:S.inpSm,type:"date",value:fd,onChange:e=>setFd(e.target.value)})),
         h("div",null,h("div",{style:S.filtLbl},"Hasta"),
