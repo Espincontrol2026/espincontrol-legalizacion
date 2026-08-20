@@ -966,7 +966,7 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
   const [newAnt,setNewAnt]=useState({ing:INGENIEROS[0],comId:"",valor:"",nota:"",fecha:today(),numLeg:1});
   const [newProy,setNewProy]=useState({ing:INGENIEROS[0],cli:"",cc:""});
   const [showNuevaProy,setShowNuevaProy]=useState(false);
-  const [fc,setFc]=useState("TODOS");
+  const [fleg,setFleg]=useState("TODOS");
   const [fcom,setFcom]=useState("TODOS");
   const [fd,setFd]=useState("");
   const [fh,setFh]=useState("");
@@ -975,7 +975,7 @@ function VistaCon({gastos,comisiones,anticipos,onDelG,onEditG,onAddA,onDelA,onAd
 
   const filt=gastos.filter(g=>{
     if(fi!=="TODOS"&&g.ing!==fi)return false;
-    if(fc!=="TODOS"&&g.con!==fc)return false;
+    if(fleg!=="TODOS"&&(Number(g.num_legalizacion)||1)!==Number(fleg))return false;
     if(fcom!=="TODOS"&&String(g.com_id)!==fcom)return false;
     if(fd&&g.fp<fd)return false;
     if(fh&&g.fp>fh)return false;
@@ -1153,9 +1153,16 @@ h("div",{style:S.kpiRow},
           h("select",{style:S.inpSm,value:fcom,onChange:e=>setFcom(e.target.value)},
             h("option",{value:"TODOS"},"Todos"),
             comisiones.map(c=>h("option",{key:c.id,value:String(c.id)},c.cli+" CC"+c.cc)))),
-        h("div",null,h("div",{style:S.filtLbl},"Concepto"),
-          h("select",{style:S.inpSm,value:fc,onChange:e=>setFc(e.target.value)},
-            h("option",{value:"TODOS"},"Todos"),CONCEPTOS.map(c=>h("option",{key:c},c)))),
+        h("div",null,h("div",{style:S.filtLbl},"Nº Legaliz."),
+          h("select",{style:S.inpSm,value:fleg,onChange:e=>setFleg(e.target.value)},
+            h("option",{value:"TODOS"},"Todas"),
+            (function(){
+              var src=gastos;
+              if(fi!=="TODOS")src=src.filter(function(g){return g.ing===fi;});
+              if(fcom!=="TODOS")src=src.filter(function(g){return String(g.com_id)===fcom;});
+              var nums=[...new Set(src.map(function(g){return Number(g.num_legalizacion)||1;}))].sort(function(a,b){return a-b;});
+              return nums.map(function(n){return h("option",{key:n,value:n},"Leg. #"+n);});
+            })())),
         h("div",null,h("div",{style:S.filtLbl},"Desde"),
           h("input",{style:S.inpSm,type:"date",value:fd,onChange:e=>setFd(e.target.value)})),
         h("div",null,h("div",{style:S.filtLbl},"Hasta"),
