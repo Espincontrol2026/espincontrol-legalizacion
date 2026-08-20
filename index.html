@@ -211,28 +211,22 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     const ef=gg.filter(g=>g.mp==="EFECTIVO").reduce((s,g)=>s+num(g.tc),0);
     const tj=gg.filter(g=>g.mp==="TARJETA").reduce((s,g)=>s+num(g.tc),0);
     const antCom=(anticipos||[]).filter(a=>Number(a.com_id)===Number(com.id));
-    const totalAnt=antCom.reduce((s,a)=>s+num(a.valor),0);
+    const antFilt=numLegFiltro&&numLegFiltro!=="TODOS"?antCom.filter(a=>(Number(a.num_legalizacion)||1)===Number(numLegFiltro)):antCom;
+    const totalAnt=antFilt.reduce((s,a)=>s+num(a.valor),0);
     const saldoAnt=totalAnt-(ef+tj);
 
     const nombre=(ingeniero.split(" ")[0]+" CC"+com.cc).slice(0,28);
     const ws=wb.addWorksheet(nombre);
 
     ws.columns=[
-      {header:"Item",key:"item",width:6},
-      {header:"Leg.",key:"leg",width:7},
-      {header:"Fecha",key:"fecha",width:13},
-      {header:"Establecimiento",key:"est",width:30},
-      {header:"NIT",key:"nit",width:16},
-      {header:"Factura",key:"fac",width:14},
-      {header:"Concepto",key:"con",width:22},
-      {header:"Subtotal",key:"sub",width:14},
-      {header:"IVA",key:"iva",width:12},
-      {header:"Tarjeta",key:"tarjeta",width:16},
-      {header:"Efectivo",key:"efectivo",width:16}
+      {key:"item",width:6},{key:"leg",width:7},{key:"fecha",width:13},
+      {key:"est",width:30},{key:"nit",width:16},{key:"fac",width:14},
+      {key:"con",width:22},{key:"sub",width:14},{key:"iva",width:12},
+      {key:"tarjeta",width:16},{key:"efectivo",width:16}
     ];
 
     // Fila titulo
-    ws.mergeCells("A1:J1");
+    ws.mergeCells("A1:K1");
     const t1=ws.getCell("A1");
     t1.value="ESPINCONTROL S.A.S. - Legalizacion de Anticipo";
     t1.font={bold:true,size:13,color:{argb:"FF"+blanco}};
@@ -241,7 +235,7 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     ws.getRow(1).height=22;
 
     // Fila info
-    ws.mergeCells("A2:J2");
+    ws.mergeCells("A2:K2");
     const t2=ws.getCell("A2");
     t2.value=ingeniero+" | Cliente: "+com.cli+" | CC: "+com.cc;
     t2.font={bold:true,size:11,color:{argb:"FF"+azul}};
@@ -250,29 +244,29 @@ function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     ws.getRow(2).height=18;
 
     // Fila totales resumen
-    ws.mergeCells("A3:E3");
+    ws.mergeCells("A3:F3");
     ws.getCell("A3").value="";
-    ws.getCell("F3").value="Efectivo: "+ef.toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ws.getCell("G3").value="Tarjeta: "+tj.toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ws.getCell("H3").value="";
-    ws.getCell("I3").value="Total: "+(ef+tj).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ws.getCell("G3").value="Efectivo: "+ef.toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ws.getCell("H3").value="Tarjeta: "+tj.toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ws.getCell("I3").value="";
+    ws.getCell("J3").value="Total: "+(ef+tj).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
     ws.getCell("J3").value="";
-    ["F3","G3","I3"].forEach(addr=>{
+    ["G3","H3","J3"].forEach(addr=>{
       ws.getCell(addr).font={bold:true,color:{argb:"FF"+azul}};
       ws.getCell(addr).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+grisClaro}};
     });
     ws.getRow(3).height=16;
 
     // Fila balance anticipo
-    ws.mergeCells("A4:C4");
+    ws.mergeCells("A4:D4");
     ws.getCell("A4").value="BALANCE DE ANTICIPO";
     ws.getCell("A4").font={bold:true,color:{argb:"FF"+blanco}};
     ws.getCell("A4").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+azul}};
-    ws.getCell("E4").value="Anticipo: "+(totalAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ws.getCell("G4").value="Gastado: "+(ef+tj).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ws.getCell("F4").value="Anticipo: "+(totalAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
+    ws.getCell("H4").value="Gastado: "+(ef+tj).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
     ws.getCell("J4").value=saldoAnt>=0?"Disponible:":"Excedido:";
     ws.getCell("J4").value=Math.abs(saldoAnt).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
-    ["E4","G4","I4","J4"].forEach(addr=>{
+    ["F4","H4","J4","K4"].forEach(addr=>{
       ws.getCell(addr).font={bold:true,color:{argb:saldoAnt>=0?"FF065F46":"FFDC2626"}};
       ws.getCell(addr).fill={type:"pattern",pattern:"solid",fgColor:{argb:saldoAnt>=0?"FFD1FAE5":"FFFEE2E2"}};
     });
