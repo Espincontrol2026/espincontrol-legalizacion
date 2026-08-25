@@ -387,15 +387,15 @@ async function generarPDF(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
     const ef=gg.filter(function(g){return g.mp==="EFECTIVO";}).reduce(function(s,g){return s+num(g.tc);},0);
     const tj=gg.filter(function(g){return g.mp==="TARJETA";}).reduce(function(s,g){return s+num(g.tc);},0);
     const totalGastado=ef+tj;
-    const antCom=(anticipos||[]).filter(function(a){return Number(a.com_id)===Number(com.id);});
+    const antCom=(anticipos||[]).filter(function(a){return Number(a.com_id)===Number(com.id)&&a.ing===ingeniero;});
     const antFilt=numLegFiltro&&numLegFiltro!=="TODOS"?antCom.filter(function(a){return(Number(a.num_legalizacion)||1)===Number(numLegFiltro);}):antCom;
     const totalAnt=antFilt.reduce(function(s,a){return s+num(a.valor);},0);
     const diff=totalGastado-totalAnt;
     const favEmpleado=totalAnt===0?totalGastado:diff>0?diff:0;
     const favEspincontrol=totalAnt>0&&diff<0?Math.abs(diff):0;
 
-    const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
-    const W=297,M=14;
+    const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+    const W=210,H=297,M=12;
     const fmt2=function(v){return "$"+Math.round(v).toLocaleString("es-CO");};
     const azul=[15,76,129];
     const verde=[6,95,70];
@@ -498,46 +498,43 @@ async function generarPDF(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
 
       imagenes=imagenes.filter(function(img){return img.ok;});
 
-      // 2 fotos por página en horizontal
+      // 2 fotos por pagina en portrait, siempre orientacion vertical
       for(var i=0;i<imagenes.length;i+=2){
-        doc.addPage("a4","landscape");
+        doc.addPage("a4","portrait");
         doc.setFillColor(...azul);
         doc.rect(0,0,W,10,"F");
         doc.setTextColor(255,255,255);
         doc.setFontSize(8);doc.setFont("helvetica","normal");
-        doc.text("ESPINCONTROL - Evidencias fotograficas | "+ingeniero+" | "+com.cli+" CC"+com.cc,W/2,7,{align:"center"});
+        doc.text("Evidencias | "+ingeniero+" | "+com.cli+" CC"+com.cc,W/2,7,{align:"center"});
 
         var imgs=[imagenes[i]];
         if(i+1<imagenes.length)imgs.push(imagenes[i+1]);
 
         imgs.forEach(function(img,j){
-          var x=j===0?M:W/2+4;
-          var maxW=W/2-M-4;
-          var maxH=185;
-          var yImg=14;
-          // Calcular proporcion
+          var maxW=W-M*2;
+          var maxH=128;
+          var yImg=13+(j*(maxH+16));
           var tmpImg=new Image();
           tmpImg.src=img.data;
-          var iw=tmpImg.naturalWidth||800;
-          var ih=tmpImg.naturalHeight||600;
+          var iw=tmpImg.naturalWidth||600;
+          var ih=tmpImg.naturalHeight||800;
+          // Forzar orientacion vertical: si la imagen es horizontal, intercambiar dims
+          if(iw>ih){var tmp=iw;iw=ih;ih=tmp;}
           var ratio=Math.min(maxW/iw,maxH/ih);
           var fw=iw*ratio;
           var fh=ih*ratio;
-          // Centrar en su mitad
-          var cx=x+(maxW-fw)/2;
+          var cx=M+(maxW-fw)/2;
           try{
             doc.addImage(img.data,"JPEG",cx,yImg,fw,fh);
           }catch(e){
             try{doc.addImage(img.data,"PNG",cx,yImg,fw,fh);}catch(e2){}
           }
-          // Etiqueta
           doc.setTextColor(107,114,128);
-          doc.setFontSize(7);
-          doc.text("Leg.#"+img.leg+" - "+img.est.slice(0,40),cx,yImg+fh+5);
+          doc.setFontSize(7);doc.setFont("helvetica","normal");
+          doc.text("Leg.#"+img.leg+" - "+img.est.slice(0,50),cx,yImg+fh+4);
         });
       }
     }
-
     // Guardar
     var nombreBase="Legalizacion_"+ingeniero.replace(/ /g,"_")+"_"+today();
     doc.save(nombreBase+".pdf");
