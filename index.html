@@ -9,6 +9,8 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -196,6 +198,8 @@ async function ocr(base64,mediaType){
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -372,6 +376,175 @@ async function ocr(base64,mediaType){
 }
 
 //  Excel 
+async function generarPDF(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
+  const {jsPDF}=window.jspdf;
+
+  comisiones.forEach(async function(com){
+    var gg=gastos.filter(function(g){return Number(g.com_id)===Number(com.id);});
+    if(numLegFiltro&&numLegFiltro!=="TODOS")gg=gg.filter(function(g){return(Number(g.num_legalizacion)||1)===Number(numLegFiltro);});
+    if(!gg.length)return;
+
+    const ef=gg.filter(function(g){return g.mp==="EFECTIVO";}).reduce(function(s,g){return s+num(g.tc);},0);
+    const tj=gg.filter(function(g){return g.mp==="TARJETA";}).reduce(function(s,g){return s+num(g.tc);},0);
+    const totalGastado=ef+tj;
+    const antCom=(anticipos||[]).filter(function(a){return Number(a.com_id)===Number(com.id);});
+    const antFilt=numLegFiltro&&numLegFiltro!=="TODOS"?antCom.filter(function(a){return(Number(a.num_legalizacion)||1)===Number(numLegFiltro);}):antCom;
+    const totalAnt=antFilt.reduce(function(s,a){return s+num(a.valor);},0);
+    const diff=totalGastado-totalAnt;
+    const favEmpleado=totalAnt===0?totalGastado:diff>0?diff:0;
+    const favEspincontrol=totalAnt>0&&diff<0?Math.abs(diff):0;
+
+    const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+    const W=297,M=14;
+    const fmt2=function(v){return "$"+Math.round(v).toLocaleString("es-CO");};
+    const azul=[15,76,129];
+    const verde=[6,95,70];
+    const rojo=[220,38,38];
+    const gris=[107,114,128];
+
+    // ── Pagina 1: resumen + tabla ────────────────────────────────────────
+    // Header
+    doc.setFillColor(...azul);
+    doc.rect(0,0,W,18,"F");
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(14);doc.setFont("helvetica","bold");
+    doc.text("ESPINCONTROL S.A.S. - Legalizacion de Anticipo",W/2,11,{align:"center"});
+    doc.setFontSize(10);doc.setFont("helvetica","normal");
+    doc.text(ingeniero+" | Cliente: "+com.cli+" | CC: "+com.cc,W/2,16,{align:"center"});
+
+    // Balance
+    var y=24;
+    doc.setFillColor(239,246,255);
+    doc.roundedRect(M,y,W-M*2,22,3,3,"F");
+    doc.setTextColor(...azul);
+    doc.setFontSize(9);doc.setFont("helvetica","bold");
+    doc.text("BALANCE DE ANTICIPO",M+4,y+6);
+
+    var cols=[
+      {label:"Anticipo Girado",val:fmt2(totalAnt),col:azul},
+      {label:"Total Gastado",val:fmt2(totalGastado),col:totalGastado>totalAnt?rojo:verde},
+      {label:"A Favor Empleado",val:fmt2(favEmpleado),col:favEmpleado>0?verde:gris},
+      {label:"A Favor ESPINCONTROL",val:fmt2(favEspincontrol),col:favEspincontrol>0?verde:gris}
+    ];
+    var colW=(W-M*2-40)/4;
+    cols.forEach(function(col,i){
+      var x=M+40+i*colW;
+      doc.setTextColor(107,114,128);
+      doc.setFontSize(7);doc.setFont("helvetica","normal");
+      doc.text(col.label,x+colW/2,y+8,{align:"center"});
+      doc.setTextColor(...col.col);
+      doc.setFontSize(11);doc.setFont("helvetica","bold");
+      doc.text(col.val,x+colW/2,y+17,{align:"center"});
+    });
+
+    // Tabla de gastos con autoTable
+    y=50;
+    doc.autoTable({
+      startY:y,
+      margin:{left:M,right:M},
+      head:[["Item","Leg.","Fecha","Establecimiento","NIT","Factura","Concepto","Subtotal","IVA","Tarjeta","Efectivo"]],
+      body:gg.map(function(g,i){
+        return [
+          i+1,
+          Number(g.num_legalizacion)||1,
+          g.fp,
+          g.est,
+          g.nit,
+          g.fac,
+          g.con,
+          fmt2(num(g.sub)),
+          fmt2(num(g.iva)),
+          g.mp==="TARJETA"?fmt2(num(g.tc)):"$0",
+          g.mp==="EFECTIVO"?fmt2(num(g.tc)):"$0"
+        ];
+      }),
+      foot:[["","","","","","","TOTALES",fmt2(gg.reduce(function(s,g){return s+num(g.sub);},0)),fmt2(gg.reduce(function(s,g){return s+num(g.iva);},0)),fmt2(tj),fmt2(ef)]],
+      styles:{fontSize:7,cellPadding:2},
+      headStyles:{fillColor:azul,textColor:[255,255,255],fontStyle:"bold",halign:"center"},
+      footStyles:{fillColor:[239,246,255],textColor:azul,fontStyle:"bold"},
+      columnStyles:{
+        0:{halign:"center",cellWidth:10},
+        1:{halign:"center",cellWidth:10},
+        2:{cellWidth:22},
+        3:{cellWidth:40},
+        4:{cellWidth:25},
+        5:{cellWidth:22},
+        6:{cellWidth:30},
+        7:{halign:"right",cellWidth:22},
+        8:{halign:"right",cellWidth:18},
+        9:{halign:"right",cellWidth:22},
+        10:{halign:"right",cellWidth:22}
+      },
+      alternateRowStyles:{fillColor:[248,250,252]}
+    });
+
+    // ── Páginas siguientes: fotos 2 por página ──────────────────────────
+    var fotosUrls=gg.filter(function(g){return g.foto_url;}).map(function(g){return{url:g.foto_url,est:g.est||"recibo",leg:Number(g.num_legalizacion)||1};});
+
+    if(fotosUrls.length>0){
+      // Cargar todas las imágenes primero
+      var imagenes=await Promise.all(fotosUrls.map(async function(f){
+        try{
+          var resp=await fetch(f.url);
+          var blob=await resp.blob();
+          return await new Promise(function(resolve){
+            var reader=new FileReader();
+            reader.onload=function(e){resolve({data:e.target.result,est:f.est,leg:f.leg,ok:true});};
+            reader.onerror=function(){resolve({ok:false});};
+            reader.readAsDataURL(blob);
+          });
+        }catch(e){return {ok:false};}
+      }));
+
+      imagenes=imagenes.filter(function(img){return img.ok;});
+
+      // 2 fotos por página en horizontal
+      for(var i=0;i<imagenes.length;i+=2){
+        doc.addPage("a4","landscape");
+        doc.setFillColor(...azul);
+        doc.rect(0,0,W,10,"F");
+        doc.setTextColor(255,255,255);
+        doc.setFontSize(8);doc.setFont("helvetica","normal");
+        doc.text("ESPINCONTROL - Evidencias fotograficas | "+ingeniero+" | "+com.cli+" CC"+com.cc,W/2,7,{align:"center"});
+
+        var imgs=[imagenes[i]];
+        if(i+1<imagenes.length)imgs.push(imagenes[i+1]);
+
+        imgs.forEach(function(img,j){
+          var x=j===0?M:W/2+4;
+          var maxW=W/2-M-4;
+          var maxH=185;
+          var yImg=14;
+          // Calcular proporcion
+          var tmpImg=new Image();
+          tmpImg.src=img.data;
+          var iw=tmpImg.naturalWidth||800;
+          var ih=tmpImg.naturalHeight||600;
+          var ratio=Math.min(maxW/iw,maxH/ih);
+          var fw=iw*ratio;
+          var fh=ih*ratio;
+          // Centrar en su mitad
+          var cx=x+(maxW-fw)/2;
+          try{
+            doc.addImage(img.data,"JPEG",cx,yImg,fw,fh);
+          }catch(e){
+            try{doc.addImage(img.data,"PNG",cx,yImg,fw,fh);}catch(e2){}
+          }
+          // Etiqueta
+          doc.setTextColor(107,114,128);
+          doc.setFontSize(7);
+          doc.text("Leg.#"+img.leg+" - "+img.est.slice(0,40),cx,yImg+fh+5);
+        });
+      }
+    }
+
+    // Guardar
+    var nombreBase="Legalizacion_"+ingeniero.replace(/ /g,"_")+"_"+today();
+    doc.save(nombreBase+".pdf");
+  });
+}
+
+
 function exportarExcel(gastos,comisiones,ingeniero,anticipos,numLegFiltro,conFotos){
   const wb=new ExcelJS.Workbook();
   wb.creator="ESPINCONTROL";
@@ -964,7 +1137,9 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
       h("div",{style:S.resumen},"Total: ",h("strong",null,fmt(total))," \u00B7 ",gastosIng.length," gastos"),
       h("button",{style:S.btnBlue,onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos,filtLeg,false)},"Solo Excel"),
           h("button",{style:{...S.btnBlue,background:"#065F46"},
-            onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos,filtLeg,true)},"Excel + Fotos")));
+            onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos,filtLeg,true)},"Excel + Fotos"),
+          h("button",{style:{...S.btnBlue,background:"#DC2626"},
+            onClick:()=>generarPDF(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos,filtLeg)},"PDF + Fotos")));
 }
 
 //  Vista Contabilidad 
@@ -1208,6 +1383,16 @@ h("div",{style:S.kpiRow},
               });
               setModal(false);
             }},"Excel + Fotos"),
+          h("button",{style:{...S.btnOrange,marginTop:0,flex:1,background:"#DC2626",color:"#fff"},
+            onClick:()=>{
+              const ings=[...new Set(filt.map(g=>g.ing))];
+              ings.forEach(ing=>{
+                const gc=filt.filter(g=>g.ing===ing);
+                const cc=comisiones.filter(c=>gc.some(g=>Number(g.com_id)===c.id||g.com_id===String(c.id)));
+                generarPDF(gc,cc,ing,anticipos,fleg);
+              });
+              setModal(false);
+            }},"PDF + Fotos"),
           h("button",{style:{...S.btnOrange,marginTop:0,flex:1,background:"#F1F5F9",color:"#374151"},onClick:()=>setModal(false)},"Cancelar"))))));
 }
 
