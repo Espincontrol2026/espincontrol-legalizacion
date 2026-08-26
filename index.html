@@ -384,32 +384,33 @@ async function generarPDF(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
   // Convierte URL a base64 data URL (imagen o primera pagina de PDF)
   async function urlToImgData(url){
     try{
-      // Si es PDF, renderizar primera pagina con pdf.js
-      if(url.toLowerCase().includes('.pdf')||url.includes('%2F')){
-        const resp=await fetch(url);
-        const ab=await resp.arrayBuffer();
-        const pdfjsLib=window['pdfjs-dist/build/pdf']||window.pdfjsLib;
-        if(pdfjsLib){
-          pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-          const pdfDoc=await pdfjsLib.getDocument({data:new Uint8Array(ab)}).promise;
-          const page=await pdfDoc.getPage(1);
-          const vp=page.getViewport({scale:2.5});
-          const canvas=document.createElement('canvas');
-          canvas.width=vp.width; canvas.height=vp.height;
-          const ctx=canvas.getContext('2d');
-          await page.render({canvasContext:ctx,viewport:vp}).promise;
-          return canvas.toDataURL('image/jpeg',0.92);
-        }
-        return null;
+      const resp=await fetch(url);
+      if(!resp.ok)return null;
+      const blob=await resp.blob();
+      const isPdf=blob.type==="application/pdf"||url.toLowerCase().includes('.pdf');
+
+      if(isPdf){
+        // Renderizar PDF con pdf.js
+        const pdfjsLib=window.pdfjsLib;
+        if(!pdfjsLib){console.warn("pdfjsLib no disponible");return null;}
+        pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.worker.min.js";
+        const ab=await blob.arrayBuffer();
+        const pdfDoc=await pdfjsLib.getDocument({data:new Uint8Array(ab)}).promise;
+        const page=await pdfDoc.getPage(1);
+        const vp=page.getViewport({scale:2.5});
+        const canvas=document.createElement('canvas');
+        canvas.width=vp.width; canvas.height=vp.height;
+        const ctx=canvas.getContext('2d');
+        await page.render({canvasContext:ctx,viewport:vp}).promise;
+        return canvas.toDataURL('image/jpeg',0.92);
       }
-      // Es imagen - cargar y corregir orientacion EXIF con canvas
+
+      // Es imagen - corregir orientacion si es horizontal
       return await new Promise(function(res){
+        const objUrl=URL.createObjectURL(blob);
         const img=new Image();
-        img.crossOrigin="anonymous";
         img.onload=function(){
-          // Dibujar en canvas para forzar orientacion correcta del navegador
           const canvas=document.createElement('canvas');
-          // Si la imagen es mas ancha que alta, rotarla 90 grados
           var w=img.naturalWidth, h=img.naturalHeight;
           if(w>h){
             canvas.width=h; canvas.height=w;
@@ -422,13 +423,15 @@ async function generarPDF(gastos,comisiones,ingeniero,anticipos,numLegFiltro){
             const ctx=canvas.getContext('2d');
             ctx.drawImage(img,0,0,w,h);
           }
+          URL.revokeObjectURL(objUrl);
           res(canvas.toDataURL('image/jpeg',0.92));
         };
-        img.onerror=function(){res(null);};
-        img.src=url;
+        img.onerror=function(){URL.revokeObjectURL(objUrl);res(null);};
+        img.src=objUrl;
       });
     }catch(e){console.warn('Error cargando evidencia:',e);return null;}
   }
+
 
   for(var ci=0;ci<comisiones.length;ci++){
     var com=comisiones[ci];
