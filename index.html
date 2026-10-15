@@ -50,7 +50,17 @@ const addGasto=async(g)=>{await sb.from("gastos").insert([{
   sub:Number(g.sub)||0,iva:Number(g.iva)||0,tc:Number(g.tc)||0,
   fp:g.fp,mp:g.mp,foto_url:g.fotoUrl||null,num_legalizacion:g.numLeg?Number(g.numLeg):null
 }]);};
-const delGasto=async(id)=>{await sb.from("gastos").delete().eq("id",id);};
+const delGasto=async(id)=>{
+  const {data:g}=await sb.from("gastos").select("foto_url").eq("id",id).single();
+  if(g&&g.foto_url){
+    try{
+      const url=g.foto_url;
+      const bucketPath=url.split("/evidencias/")[1];
+      if(bucketPath) await sb.storage.from("evidencias").remove([decodeURIComponent(bucketPath)]);
+    }catch(e){console.warn("No se pudo borrar foto:",e);}
+  }
+  await sb.from("gastos").delete().eq("id",id);
+};
 const editGasto=async(g)=>{await sb.from("gastos").update({
   ing:g.ing,com_id:g.comId||null,com_cli:g.comCli||null,com_cc:g.comCc||null,
   est:g.est,nit:g.nit,fac:g.fac,con:g.con,
@@ -240,7 +250,17 @@ const addGasto=async(g)=>{await sb.from("gastos").insert([{
   sub:Number(g.sub)||0,iva:Number(g.iva)||0,tc:Number(g.tc)||0,
   fp:g.fp,mp:g.mp,foto_url:g.fotoUrl||null,num_legalizacion:g.numLeg?Number(g.numLeg):null
 }]);};
-const delGasto=async(id)=>{await sb.from("gastos").delete().eq("id",id);};
+const delGasto=async(id)=>{
+  const {data:g}=await sb.from("gastos").select("foto_url").eq("id",id).single();
+  if(g&&g.foto_url){
+    try{
+      const url=g.foto_url;
+      const bucketPath=url.split("/evidencias/")[1];
+      if(bucketPath) await sb.storage.from("evidencias").remove([decodeURIComponent(bucketPath)]);
+    }catch(e){console.warn("No se pudo borrar foto:",e);}
+  }
+  await sb.from("gastos").delete().eq("id",id);
+};
 const editGasto=async(g)=>{await sb.from("gastos").update({
   ing:g.ing,com_id:g.comId||null,com_cli:g.comCli||null,com_cc:g.comCc||null,
   est:g.est,nit:g.nit,fac:g.fac,con:g.con,
@@ -878,7 +898,7 @@ function App(){
             onClick:function(){setPerfil("");localStorage.removeItem("espincontrol_perfil");setVista("ing");}},"Salir")))),
     h("main",{style:S.main},
       vista==="ing"
-        ?h(VistaIng,{onAddG:addG,onEditG:editG,onAddC:addC,onDelC:delC,gastos,comisiones,anticipos,perfil})
+        ?h(VistaIng,{onAddG:addG,onEditG:editG,onDelG:delG,onAddC:addC,onDelC:delC,gastos,comisiones,anticipos,perfil})
         :h(VistaCon,{gastos,comisiones,anticipos,onDelG:delG,onEditG:editG,onAddA:addA,onDelA:delA,onAddC:addC,onDelC:delC})),
     showCfg?h("div",{style:S.modalBg},
       h("div",{style:S.modal},
@@ -899,7 +919,7 @@ function App(){
 }
 
 
-function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perfil}){
+function VistaIng({onAddG,onEditG,onDelG,onAddC,onDelC,gastos,comisiones,anticipos,perfil}){
   const EG={ing:INGENIEROS[0],comId:"",numLeg:"",est:"",nit:"",fac:"",con:CONCEPTOS[0],sub:"",iva:"",fp:today(),mp:"EFECTIVO"};
   const [f,setF]=useState(EG);
   const [editId,setEditId]=useState(null);
@@ -966,6 +986,13 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
       con:g.con,sub:String(g.sub),iva:String(g.iva),fp:g.fp,mp:g.mp});
     setEditId(g.id);setPrev(null);setOcrs("idle");
     window.scrollTo({top:0,behavior:"smooth"});
+  };
+
+  const eliminarGasto=async(id)=>{
+    const g=gastos.find(x=>x.id===id);
+    const label=g?`${g.est||"gasto"} - ${g.fp||""} - ${fmt(g.tc)}`:"este gasto";
+    if(!window.confirm(`¿Eliminar ${label}?\n\nEsta acción no se puede deshacer.`))return;
+    await onDelG(id);
   };
 
   const crearComision=async()=>{
@@ -1166,7 +1193,7 @@ function VistaIng({onAddG,onEditG,onAddC,onDelC,gastos,comisiones,anticipos,perf
             })())),
         (filtProy!=="TODOS"||filtLeg!=="TODOS")&&h("button",{style:{...S.btnSmGray,alignSelf:"flex-end"},
           onClick:function(){setFiltProy("TODOS");setFiltLeg("TODOS");}},"x Limpiar")),
-      h(Tabla,{gastos:(function(){var g=filtProy==="TODOS"?gastosIng:gastosIng.filter(function(g){return Number(g.com_id)===Number(filtProy);});return filtLeg==="TODOS"?g:g.filter(function(g){return (Number(g.num_legalizacion)||1)===Number(filtLeg);});})(),comisiones,onEdit:cargarEdicion}),
+      h(Tabla,{gastos:(function(){var g=filtProy==="TODOS"?gastosIng:gastosIng.filter(function(g){return Number(g.com_id)===Number(filtProy);});return filtLeg==="TODOS"?g:g.filter(function(g){return (Number(g.num_legalizacion)||1)===Number(filtLeg);});})(),comisiones,onEdit:cargarEdicion,onDel:eliminarGasto}),
       h("div",{style:S.resumen},"Total: ",h("strong",null,fmt(total))," \u00B7 ",gastosIng.length," gastos"),
       h("button",{style:S.btnBlue,onClick:()=>exportarExcel(gastosIng,misComisiones.filter(function(com){return gastosIng.some(function(g){return Number(g.com_id)===com.id||g.com_id===String(com.id);});}),f.ing,anticipos,filtLeg,false)},"Solo Excel"),
           h("button",{style:{...S.btnBlue,background:"#065F46"},
